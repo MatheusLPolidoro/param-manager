@@ -19,3 +19,6 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
+
+repo_url: https://github.com/MatheusLPolidoro/param-manager
+repo_name: MatheusLPolidoro/param-manager
