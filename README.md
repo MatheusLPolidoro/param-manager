@@ -14,7 +14,7 @@ Biblioteca Python orientada a objetos que implementa o padrão Singleton para in
 ## Instalação
 
 ```bash
-pip install tinydb requests
+pip install param-manager
 ```
 
 ## Uso Básico

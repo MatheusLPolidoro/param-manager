@@ -11,6 +11,13 @@ dependencies = [
     "requests"
 ]
 
+[tool.setuptools.packages.find]
+where = ["."]
+
+[build-system]
+requires = ["setuptools>=61.0,<70"]
+build-backend = "setuptools.build_meta"
+
 [tool.ruff]
 line-length = 79
 
@@ -27,13 +34,6 @@ lint = "ruff check . --diff"
 format = "ruff format ."
 test = "pytest . -s -x --cov=param_manager -vv"
 post_test = "python -m coverage html"
-
-[tool.setuptools.packages.find]
-where = ["."]
-
-[build-system]
-requires = ["setuptools>=61.0,<70"]
-build-backend = "setuptools.build_meta"
 
 [tool.towncrier]
 package = "param_manager"
