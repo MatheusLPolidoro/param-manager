@@ -1,0 +1,95 @@
+[project]
+name = "param-manager"
+version = "0.1.0"
+description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
+authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.8"
+
+dependencies = [
+    "tinydb",
+    "requests"
+]
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+preview = true
+select = ['I', 'F', 'E', 'W', 'PL', 'PT']
+
+[tool.ruff.format]
+preview = true
+quote-style = 'single'
+
+[tool.taskipy.tasks]
+lint = "ruff check . --diff"
+format = "ruff format ."
+test = "pytest . -s -x --cov=param_manager -vv"
+post_test = "python -m coverage html"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[build-system]
+requires = ["setuptools>=61.0,<70"]
+build-backend = "setuptools.build_meta"
+
+[tool.towncrier]
+package = "param_manager"
+package_dir = "."
+filename = "CHANGELOG.md"
+directory = "chanlogs.d"
+underlines = ["=", "-", "~"]
+title_format = "Versão {version} ({project_date})"
+issue_format = "[#{issue}](https://github.com/seu_usuario/seu_repo/issues/{issue})"
+
+[[tool.towncrier.type]]
+directory = "breaking"
+name = ":warning: MUDANÇAS QUEBRADAS"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "feature"
+name = ":zap: NOVAS FUNCIONALIDADES"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "enhancement"
+name = ":rocket: OTIMIZAÇÕES"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "fix"
+name = ":bug: CORREÇÕES"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "deprecation"
+name = ":wastebasket: OBSOLETOS"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "security"
+name = ":shield: SEGURANÇA"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "docs"
+name = ":open_file_folder: DOCUMENTAÇÃO"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "tests"
+name = ":test_tube: TESTES"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "infra"
+name = ":classical_building: INFRAESTRUTURA"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "chore"
+name = ":broom: LIMPEZA"
+showcontent = true
