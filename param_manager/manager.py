@@ -263,9 +263,11 @@ class ParamManager:
         if app_name in self._cache:
             self._cache[app_name][param_name] = param_value
             self._cache_timestamp[app_name] = time.time()
-
-            # Salva dados localmente
-            self._save_to_local_db(app_name, self._cache[app_name])
+        else:
+            self._cache[app_name] = {param_name: param_value}
+            
+        # Salva dados localmente
+        self._save_to_local_db(app_name, self._cache[app_name])
 
         return param_value
 
