@@ -1,6 +1,6 @@
 Versão 0.1.1 (2025-05-27)
 
-### :zap: NOVAS FUNCIONALIDADES
+### :bug: CORREÇÕES
 
 - Corrigido salvamente em DB local para chamada de parametro unitario.
 
