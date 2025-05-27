@@ -1,3 +1,10 @@
+Versão 0.1.0 (2025-05-27)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- Corrigido salvamente em DB local para chamada de parametro unitario.
+
+
 Versão 0.1.0 (2025-05-23)
 
 ### :zap: NOVAS FUNCIONALIDADES

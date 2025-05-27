@@ -1,6 +1,6 @@
 [project]
 name = "param-manager"
-version = "0.1.0"
+version = "0.1.1"
 description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
@@ -10,6 +10,11 @@ dependencies = [
     "tinydb",
     "requests"
 ]
+
+[project.urls]
+"Documentation" = "https://matheuslpolidoro.github.io/param-manager/"
+"Source Code" = "https://github.com/MatheusLPolidoro/param-manager"
+"Bug Tracker" = "https://github.com/MatheusLPolidoro/param-manager/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -1,8 +1,11 @@
 Metadata-Version: 2.1
 Name: param-manager
-Version: 0.1.0
+Version: 0.1.1
 Summary: Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB.
 Author-email: MatheusLPolidoro <mattpolidoro4@gmail.com>
+Project-URL: Documentation, https://matheuslpolidoro.github.io/param-manager/
+Project-URL: Source Code, https://github.com/MatheusLPolidoro/param-manager
+Project-URL: Bug Tracker, https://github.com/MatheusLPolidoro/param-manager/issues
 Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 Requires-Dist: tinydb
