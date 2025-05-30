@@ -270,7 +270,7 @@ class ParamManager:
             self._cache_timestamp[app_name] = time.time()
         else:
             self._cache[app_name] = {param_name: param_value}
-            
+
         # Salva dados localmente
         self._save_to_local_db(app_name, self._cache[app_name])
 

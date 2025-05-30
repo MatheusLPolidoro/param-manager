@@ -78,7 +78,7 @@ def test_get_param_from_global_cache(setup_param_manager, mock_response_data):
 
         # Verifica se a API foi chamada corretamente
         mock_get.assert_called_once_with(
-            'http://test-api.example.com/parameters/apps/test_app/params',
+            'http://test-api.example.com/parameters/apps/test_app/params/',
             timeout=2,
             verify=False,
         )
@@ -277,7 +277,7 @@ def test_api_error_status_code(setup_param_manager, mock_response_data):
 
     # Define uma duração de cache muito curta para o teste
     param_manager._cache_duration = 0  # 100ms
-    
+
     # Configura o mock para requests.get
     with patch('param_manager.manager.requests.get') as mock_get:
         mock_response = MagicMock()
@@ -290,7 +290,7 @@ def test_api_error_status_code(setup_param_manager, mock_response_data):
 
         # Verifica se o parâmetro local foi retornado
         assert param == 'test_value'
-    
+
         mock_response.status_code = 500
 
         # Busca um parâmetro para preencher o cache
