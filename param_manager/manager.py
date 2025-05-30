@@ -66,8 +66,13 @@ class ParamManager:
         self._param_cache = {}  # formato: {app_name:param_name: param_value}
         self._param_cache_timestamp = {}  # formato: {app_name:param_name: timestamp}
 
-        # Diretório para o banco de dados local
-        db_dir = os.path.join(os.path.expanduser('~'), '.param_manager')
+        # Obtém o diretório do arquivo atual
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+
+        # Define o diretório para salvar os dados
+        db_dir = os.path.join(current_dir, '.param_manager')
+
+        # Garante que o diretório existe antes de salvar
         os.makedirs(db_dir, exist_ok=True)
 
         # Instância do TinyDB para armazenamento local
@@ -194,7 +199,7 @@ class ParamManager:
             Exception: Se ocorrer erro na requisição.
         """
         # Constrói URL apropriada para todos os parâmetros
-        url = f'{self._api_base_url}/parameters/apps/{app_name}/params'
+        url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
 
         logger.info(f'Buscando todos os parâmetros da API: {url}')
 
