@@ -36,7 +36,11 @@ class ParamManager:
         return cls.__instance
 
     def __init__(
-        self, api_url: str = None, cache_duration: int = 3600, timeout: int = 5
+        self,
+        api_url: str | None = None,
+        cache_duration: int = 3600,
+        timeout: int = 5,
+        local_db_path: str | None = None
     ):
         """
         Inicializa a instância com configurações.
@@ -45,6 +49,7 @@ class ParamManager:
             api_url: URL base da API de parâmetros. Se None, usa o valor padrão.
             cache_duration: Duração do cache em segundos (padrão: 1 hora).
             timeout: Tempo limite para requisições à API em segundos.
+            local_db_path: Caminho para salvar o db local.
         """
         # Evita reinicialização se já foi inicializado
         if hasattr(self, '_initialized') and self._initialized:
@@ -67,7 +72,10 @@ class ParamManager:
         self._param_cache_timestamp = {}  # formato: {app_name:param_name: timestamp}
 
         # Obtém o diretório do arquivo atual
-        current_dir = os.path.dirname(os.path.abspath(__file__))
+        if local_db_path and os.path.exists(local_db_path):
+            current_dir = local_db_path
+        else:
+            current_dir = os.path.dirname(os.path.abspath(__file__))
 
         # Define o diretório para salvar os dados
         db_dir = os.path.join(current_dir, '.param_manager')

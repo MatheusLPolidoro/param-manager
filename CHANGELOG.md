@@ -2,7 +2,7 @@ Versão 0.1.0 (2025-05-30)
 
 ### :bug: CORREÇÕES
 
-- Correção de url na requisição de todos os parametros e alteração de salvamento de db local para pasta do biblioteca.
+- Correção de url na requisição de todos os parametros e alteração de salvamento de db local para pasta da biblioteca.
 
 
 Versão 0.1.2 (2025-05-27)
