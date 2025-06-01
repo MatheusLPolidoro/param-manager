@@ -1,3 +1,10 @@
+Versão 0.1.0 (2025-06-01)
+
+### :bug: CORREÇÕES
+
+- Correção de salvamento de arquivo db local com opção de passar o path.
+
+
 Versão 0.1.0 (2025-05-30)
 
 ### :bug: CORREÇÕES
