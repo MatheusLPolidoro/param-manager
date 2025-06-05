@@ -172,7 +172,7 @@ class ParamManager:
                 self._param_cache[param_cache_key] = param_value
                 self._param_cache_timestamp[param_cache_key] = time.time()
 
-            return param_value.get('value')
+                return param_value.get('value')
 
         # Se não houver cache válido, tenta buscar da API
         try:
