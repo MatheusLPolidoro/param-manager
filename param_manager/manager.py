@@ -1,3 +1,4 @@
+import threading
 import logging
 import os
 import time
@@ -40,7 +41,7 @@ class ParamManager:
         api_url: str | None = None,
         cache_duration: int = 3600,
         timeout: int = 5,
-        local_db_path: str | None = None
+        local_db_path: str | None = None,
     ):
         """
         Inicializa a instância com configurações.
@@ -50,12 +51,13 @@ class ParamManager:
             cache_duration: Duração do cache em segundos (padrão: 1 hora).
             timeout: Tempo limite para requisições à API em segundos.
             local_db_path: Caminho para salvar o db local.
+            update: Realiza ou não atualização no arquivo DB local.
         """
         # Evita reinicialização se já foi inicializado
         if hasattr(self, '_initialized') and self._initialized:
             return
-
-        self._api_base_url = api_url or 'http://10.111.188.61:8084'
+        self._lock = threading.Lock()
+        self._api_base_url = api_url or 'http://djuv6cons85820:8084'
         self._cache_duration = (
             cache_duration  # em segundos (1 hora por padrão)
         )
@@ -342,16 +344,18 @@ class ParamManager:
             app_name: Nome do aplicativo.
             params: Dicionário com os parâmetros.
         """
-        logger.info(f'Salvando parâmetros localmente para o app: {app_name}')
-
         # Define a tabela para o app
-        table = self._db.table(app_name)
+        
+        logger.info(f'Salvando parâmetros localmente para o app: {app_name}')
+        
+        with self._lock:  # Aguarda a liberação do lock de outras threads
+            table = self._db.table(app_name)
 
-        # Limpa a tabela antes de inserir novos dados
-        table.truncate()
+            # Limpa a tabela antes de inserir novos dados
+            table.truncate()
 
-        # Insere os parâmetros
-        table.insert({'timestamp': time.time(), 'params': params})
+            # Insere os parâmetros
+            table.insert({'timestamp': time.time(), 'params': params})
 
     def _get_from_local_db(
         self, app_name: str, param_name: Optional[str] = None
