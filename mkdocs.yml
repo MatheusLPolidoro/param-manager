@@ -2,14 +2,38 @@ site_name: Param Manager
 
 theme:
   name: material
+  language: pt-BR
   features:
     - content.code.annotate
     - content.tabs.link
+  palette:
 
-plugins: 
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  - search:
+      separator: '[\s\-\.]+'
   - towncrier
 
 markdown_extensions:
+  - attr_list
+  - md_in_html
+  - pymdownx.blocks.caption
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
   - pymdownx.snippets
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
@@ -19,6 +43,3 @@ markdown_extensions:
         - name: mermaid
           class: mermaid
           format: !!python/name:pymdownx.superfences.fence_code_format
-
-repo_url: https://github.com/MatheusLPolidoro/param-manager
-repo_name: MatheusLPolidoro/param-manager

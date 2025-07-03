@@ -1,3 +1,10 @@
+Versão 0.1.6 (2025-06-19)
+
+### :bug: CORREÇÕES
+
+- Correção de utilização de cache caso a API esteja fora do ar.
+
+
 Versão 0.1.5 (2025-06-05)
 
 ### :bug: CORREÇÕES
@@ -5,14 +12,14 @@ Versão 0.1.5 (2025-06-05)
 - Corrigido leitura de parâmetros unitários ao realizar consulta pelo método get_param.
 
 
-Versão 0.1.0 (2025-06-01)
+Versão 0.1.4 (2025-06-01)
 
 ### :bug: CORREÇÕES
 
 - Correção de salvamento de arquivo db local com opção de passar o path.
 
 
-Versão 0.1.0 (2025-05-30)
+Versão 0.1.3 (2025-05-30)
 
 ### :bug: CORREÇÕES
 

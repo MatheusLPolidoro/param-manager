@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 import requests
+from requests.exceptions import Timeout, ConnectionError
 from tinydb import TinyDB
 
 # Configuração de logging
@@ -73,6 +74,9 @@ class ParamManager:
         self._param_cache = {}  # formato: {app_name:param_name: param_value}
         self._param_cache_timestamp = {}  # formato: {app_name:param_name: timestamp}
 
+        # Dicionário para armazenar o timestamp do último erro de API por app
+        self._api_error_timestamp = {}  # formato: {app_name: timestamp}
+
         # Obtém o diretório do arquivo atual
         if local_db_path and os.path.exists(local_db_path):
             current_dir = local_db_path
@@ -128,12 +132,29 @@ class ParamManager:
             logger.info(f'Usando cache para o app: {app_name}')
             return self._cache[app_name]
 
+        # Verifica se houve um erro de API recente e se o cache ainda é válido para evitar novas requisições
+        if self._is_api_error_cached(app_name):
+            logger.warning(
+                f'API para {app_name} está em cooldown devido a erro anterior. Usando dados locais ou cache.'
+            )
+            return self._get_from_local_db(app_name)
+
         # Se não houver cache válido, tenta buscar da API
         try:
             params = self._fetch_from_api(app_name)
             return params
+        except (Timeout, ConnectionError) as e:
+            logger.error(
+                f'Erro de conexão/timeout ao buscar parâmetros da API para {app_name}: {str(e)}'
+            )
+            self._api_error_timestamp[app_name] = (
+                time.time()
+            )  # Registra o timestamp do erro
+            return self._handle_api_error(app_name, None, e)
         except Exception as e:
-            logger.error(f'Erro ao buscar parâmetros da API: {str(e)}')
+            logger.error(
+                f'Erro inesperado ao buscar parâmetros da API para {app_name}: {str(e)}'
+            )
             return self._handle_api_error(app_name, None, e)
 
     def get_param(self, app_name: str, param_name: str) -> Any:
@@ -176,6 +197,16 @@ class ParamManager:
 
                 return param_value.get('value')
 
+        # Verifica se houve um erro de API recente e se o cache ainda é válido para evitar novas requisições
+        if self._is_api_error_cached(app_name):
+            logger.warning(
+                f'API para {app_name} está em cooldown devido a erro anterior. Usando dados locais ou cache.'
+            )
+            params = self._get_from_local_db(app_name, param_name)
+            return (
+                params.get(param_name, dict()).get('value') if params else None
+            )
+
         # Se não houver cache válido, tenta buscar da API
         try:
             # Busca o parâmetro específico da API
@@ -183,8 +214,22 @@ class ParamManager:
             if not isinstance(param_value, dict):
                 param_value = dict()
             return param_value.get('value')
+        except (Timeout, ConnectionError) as e:
+            logger.error(
+                f'Erro de conexão/timeout ao buscar parâmetro da API para {app_name}:{param_name}: {str(e)}'
+            )
+            self._api_error_timestamp[app_name] = (
+                time.time()
+            )  # Registra o timestamp do erro
+            # Tenta recuperar do banco local
+            params = self._handle_api_error(app_name, param_name, e)
+            return (
+                params.get(param_name, dict()).get('value') if params else None
+            )
         except Exception as e:
-            logger.error(f'Erro ao buscar parâmetro da API: {str(e)}')
+            logger.error(
+                f'Erro inesperado ao buscar parâmetro da API para {app_name}:{param_name}: {str(e)}'
+            )
 
             # Tenta recuperar do banco local
             params = self._handle_api_error(app_name, param_name, e)
@@ -232,6 +277,10 @@ class ParamManager:
 
         # Salva dados localmente
         self._save_to_local_db(app_name, params)
+
+        # Limpa o timestamp de erro da API se a requisição foi bem-sucedida
+        if app_name in self._api_error_timestamp:
+            del self._api_error_timestamp[app_name]
 
         return params
 
@@ -284,6 +333,10 @@ class ParamManager:
         # Salva dados localmente
         self._save_to_local_db(app_name, self._cache[app_name])
 
+        # Limpa o timestamp de erro da API se a requisição foi bem-sucedida
+        if app_name in self._api_error_timestamp:
+            del self._api_error_timestamp[app_name]
+
         return param_value
 
     def _is_cache_valid(self, app_name: str) -> bool:
@@ -335,6 +388,25 @@ class ParamManager:
         cache_time = self._param_cache_timestamp[param_cache_key]
 
         return (current_time - cache_time) < self._cache_duration
+
+    def _is_api_error_cached(self, app_name: str) -> bool:
+        """
+        Verifica se houve um erro de API recente para o app e se o cooldown ainda está ativo.
+
+        Args:
+            app_name: Nome do aplicativo.
+
+        Returns:
+            True se o erro de API estiver em cooldown, False caso contrário.
+        """
+        if app_name not in self._api_error_timestamp:
+            return False
+
+        current_time = time.time()
+        error_time = self._api_error_timestamp[app_name]
+
+        # O erro é considerado "em cache" (cooldown) se o tempo desde o erro for menor que a duração do cache
+        return (current_time - error_time) < self._cache_duration
 
     def _save_to_local_db(self, app_name: str, params: Dict[str, Any]) -> None:
         """
@@ -444,6 +516,8 @@ class ParamManager:
                 del self._cache[app_name]
             if app_name in self._cache_timestamp:
                 del self._cache_timestamp[app_name]
+            if app_name in self._api_error_timestamp:
+                del self._api_error_timestamp[app_name]
 
             # Limpa também todos os caches específicos relacionados ao app
             param_cache_keys = [
@@ -464,6 +538,7 @@ class ParamManager:
             self._cache_timestamp = {}
             self._param_cache = {}
             self._param_cache_timestamp = {}
+            self._api_error_timestamp = {}
             logger.info('Cache limpo para todos os apps e parâmetros')
 
     def get_cache_info(self) -> Dict[str, Any]:
@@ -480,6 +555,7 @@ class ParamManager:
             'params_cached': [],
             'param_cache_timestamps': {},
             'param_cache_valid': {},
+            'api_error_timestamps': {},
         }
 
         # Informações sobre o cache global
@@ -520,5 +596,21 @@ class ParamManager:
                 else 0,
             }
             info['param_cache_valid'][param_key] = is_valid
+
+        # Informações sobre os timestamps de erro da API
+        for app_name, timestamp in self._api_error_timestamp.items():
+            dt = datetime.fromtimestamp(timestamp)
+            cooldown_ends_at = dt + timedelta(seconds=self._cache_duration)
+            is_cooldown_active = self._is_api_error_cached(app_name)
+
+            info['api_error_timestamps'][app_name] = {
+                'error_at': dt.isoformat(),
+                'cooldown_ends_at': cooldown_ends_at.isoformat(),
+                'cooldown_remaining_seconds': int(
+                    cooldown_ends_at - datetime.fromtimestamp(time.time())
+                ).total_seconds()
+                if is_cooldown_active
+                else 0,
+            }
 
         return info
