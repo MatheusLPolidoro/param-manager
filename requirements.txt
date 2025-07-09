@@ -1,2 +1,4 @@
 tinydb>=4.8.0
 requests>=2.32.0
+pycryptodome==3.23.0
+python-dotenv==1.1.1

@@ -1,3 +1,10 @@
+Versão 0.2.0 (2025-07-09)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- Adicionado tipo "secret" com descriptografia de dados salvos na API com base no arquivo de variaveis de ambiente ".env".
+
+
 Versão 0.1.7 (2025-07-03)
 
 ### :bug: CORREÇÕES
