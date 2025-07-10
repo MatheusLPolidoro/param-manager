@@ -25,5 +25,5 @@ sys.path.append(str(pathlib.Path(__file__).parent))
 from .manager import ParamManager
 
 __author__ = 'MatheusLPolidoro'
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 __all__ = ['ParamManager', 'TinyDB']

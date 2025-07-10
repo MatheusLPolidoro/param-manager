@@ -1,3 +1,10 @@
+Versão 0.2.1 (2025-07-10)
+
+### :bug: CORREÇÕES
+
+- Adicionado dependências no pyproject.toml.
+
+
 Versão 0.2.0 (2025-07-09)
 
 ### :zap: NOVAS FUNCIONALIDADES

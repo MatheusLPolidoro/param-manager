@@ -1,14 +1,16 @@
 [project]
 name = "param-manager"
-version = "0.2.0"
+version = "0.2.1"
 description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.8"
 
 dependencies = [
-    "tinydb",
-    "requests"
+    "tinydb>=4.8.0",
+    "requests>=2.32.0",
+    "pycryptodome==3.23.0",
+    "python-dotenv==1.1.1"
 ]
 
 [project.urls]
