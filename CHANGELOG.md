@@ -1,3 +1,10 @@
+Versão 0.2.2 (2025-07-10)
+
+### :bug: CORREÇÕES
+
+- Corrigido local_path_db e .env para geração de executaveis com o pyinstaller.
+
+
 Versão 0.2.1 (2025-07-10)
 
 ### :bug: CORREÇÕES
