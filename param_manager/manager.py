@@ -49,32 +49,6 @@ class ParamManager:
         timeout: int = 5,
         local_db_path: str | None = None,
     ):
-        """
-        Inicializa a instância com configurações.
-        """
-
-        # Evita reinicialização se já foi inicializado
-        if hasattr(self, '_initialized') and self._initialized:
-            return
-
-        # Carrega variáveis do .env
-        load_dotenv()
-
-        # Lê variáveis do ambiente, com fallback para os parâmetros passados
-        self._api_base_url = api_url or os.getenv(
-            'API_URL', 'http://djuv6cons85820:8084'
-        )
-        self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
-        self._timeout = int(os.getenv('TIMEOUT', timeout))
-        self._lock = threading.Lock()
-
-    def __init__(
-        self,
-        api_url: str | None = None,
-        cache_duration: int = 3600,
-        timeout: int = 5,
-        local_db_path: str | None = None,
-    ):
         # Evita reinicialização
         if hasattr(self, '_initialized') and self._initialized:
             return
@@ -92,9 +66,7 @@ class ParamManager:
 
         load_dotenv(dotenv_path=dotenv_path)
 
-        self._api_base_url = api_url or os.getenv(
-            'API_URL', 'http://djuv6cons85820:8084'
-        )
+        self._api_base_url = api_url or os.getenv('API_URL', '')
         self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
         self._timeout = int(os.getenv('TIMEOUT', timeout))
         self._lock = threading.Lock()
@@ -113,7 +85,7 @@ class ParamManager:
                 else os.path.dirname(os.path.abspath(__file__))
             )
 
-        db_dir = os.path.join(current_dir, '.param_manager')
+        db_dir = os.path.join(current_dir, 'param_manager')
         os.makedirs(db_dir, exist_ok=True)
 
         self._db_path = os.path.join(db_dir, 'params_db.json')

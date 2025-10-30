@@ -1,6 +1,5 @@
 dist
 docs
-htmlcov
 param_manager
 site
 tests

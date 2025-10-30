@@ -11,7 +11,7 @@ def setup_param_manager():
     ParamManager._ParamManager__instance = None
 
     # Cria um diretório temporário para o banco de dados de teste
-    test_db_dir = os.path.join(os.path.expanduser('~'), '.param_manager_test')
+    test_db_dir = os.path.join(os.path.expanduser('~'), 'param_manager_test')
     os.makedirs(test_db_dir, exist_ok=True)
     test_db_path = os.path.join(test_db_dir, 'test_params_db.json')
 
