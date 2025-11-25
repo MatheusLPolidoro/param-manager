@@ -1,10 +1,10 @@
 [project]
 name = "param-manager"
-version = "0.2.3"
+version = "0.2.4"
 description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.8,<=3.14"
 
 dependencies = [
     "tinydb>=4.8.0",
@@ -27,6 +27,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 79
+exclude = ["__init__.py", "tests/*", "docs/*", "chanlogs.d/*"]
 
 [tool.ruff.lint]
 preview = true
@@ -37,8 +38,10 @@ preview = true
 quote-style = 'single'
 
 [tool.taskipy.tasks]
+fix = "ruff check . --fix"
 lint = "ruff check . --diff"
 format = "ruff format ."
+pre_test = "task fix"
 test = "pytest . -s -x --cov=param_manager -vv"
 post_test = "python -m coverage html"
 

@@ -1,18 +1,19 @@
-import threading
 import logging
 import os
+import sys
+import threading
 import time
 from datetime import datetime, timedelta
+from http import HTTPStatus
 from typing import Any, Dict, Optional
-import sys
+
 import requests
-from requests.exceptions import Timeout, ConnectionError
-from tinydb import TinyDB
-from dotenv import load_dotenv, find_dotenv
+from Crypto.Cipher import AES
 from Crypto.Hash import SHA256
 from Crypto.Protocol.KDF import PBKDF2
-import os
-from Crypto.Cipher import AES
+from dotenv import find_dotenv, load_dotenv
+from requests.exceptions import ConnectionError, Timeout
+from tinydb import TinyDB
 
 # Configuração de logging
 logging.basicConfig(
@@ -27,7 +28,8 @@ class ParamManager:
     Gerenciador de parâmetros que implementa o padrão Singleton.
 
     Esta classe permite recuperar parâmetros de uma API, com sistema de cache
-    e fallback para armazenamento local usando TinyDB quando a API está indisponível.
+    e fallback para armazenamento local usando TinyDB
+    quando a API está indisponível.
     """
 
     # Atributo de classe para armazenar a instância única (padrão Singleton)
@@ -35,7 +37,8 @@ class ParamManager:
 
     def __new__(cls, *args, **kwargs):
         """
-        Implementa o padrão Singleton, garantindo uma única instância da classe.
+        Implementa o padrão Singleton, garantindo
+        uma única instância da classe.
         """
         if cls.__instance is None:
             cls.__instance = super(ParamManager, cls).__new__(cls)
@@ -66,7 +69,11 @@ class ParamManager:
 
         load_dotenv(dotenv_path=dotenv_path)
 
-        self._api_base_url = api_url or os.getenv('API_URL', '')
+        self._api_base_url = (
+            api_url or
+            os.getenv('API_PARAMS_URL', '') or
+            os.getenv('API_URL', '')
+        )
         self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
         self._timeout = int(os.getenv('TIMEOUT', timeout))
         self._lock = threading.Lock()
@@ -129,8 +136,10 @@ class ParamManager:
                 ):
                     return None
 
-                segredo_base = os.getenv('CHAVE_CUSTODIA_APP')
-                if not segredo_base:
+                app_custody_key = os.getenv('CHAVE_CUSTODIA_APP') or os.getenv(
+                    'APP_CUSTODY_KEY'
+                )
+                if not app_custody_key:
                     logger.error(
                         '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
                     )
@@ -138,7 +147,7 @@ class ParamManager:
 
                 salt = bytes.fromhex(value['salt'])
                 chave_custodia = PBKDF2(
-                    segredo_base.encode(),
+                    app_custody_key.encode(),
                     salt,
                     dkLen=32,
                     count=100_000,
@@ -180,7 +189,8 @@ class ParamManager:
         # Verifica erro de API anterior
         if self._is_api_error_cached(app_name):
             logger.warning(
-                f'API para {app_name} está em cooldown. Usando dados locais ou cache.'
+                f'API para {app_name} está em cooldown.'
+                f'Usando dados locais ou cache.'
             )
             return _processar_parametros(self._get_from_local_db(app_name))
 
@@ -208,7 +218,7 @@ class ParamManager:
             param_name: Nome do parâmetro.
 
         Returns:
-            Valor do parâmetro (descriptografado, se for tipo password), ou None.
+            Valor do parâmetro descriptografado, se for tipo password, ou None.
         """
 
         logger.info(
@@ -223,8 +233,12 @@ class ParamManager:
                 ):
                     return None
 
-                segredo_base = os.getenv('CHAVE_CUSTODIA_APP')
-                if not segredo_base:
+                if not (
+                    app_custody_key := (
+                        os.getenv('CHAVE_CUSTODIA_APP')
+                        or os.getenv('APP_CUSTODY_KEY')
+                    )
+                ):
                     logger.error(
                         '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
                     )
@@ -232,7 +246,7 @@ class ParamManager:
 
                 salt = bytes.fromhex(value['salt'])
                 chave_custodia = PBKDF2(
-                    segredo_base.encode(),
+                    app_custody_key.encode(),
                     salt,
                     dkLen=32,
                     count=100_000,
@@ -256,7 +270,8 @@ class ParamManager:
                 return senha.decode()
             except Exception as e:
                 logger.error(
-                    f'Falha na descriptografia do parâmetro {param_name}: {str(e)}'
+                    f'Falha na descriptografia do parâmetro {param_name}:'
+                    f' {str(e)}'
                 )
                 return None
 
@@ -270,7 +285,8 @@ class ParamManager:
         # Verifica cache específico
         if self._is_param_cache_valid(app_name, param_name):
             logger.info(
-                f'Usando cache específico para o parâmetro: {param_name} do app: {app_name}'
+                f'Usando cache específico para o parâmetro:'
+                f' {param_name} do app: {app_name}'
             )
             return _extract_value(self._param_cache[param_cache_key])
 
@@ -334,7 +350,8 @@ class ParamManager:
 
         Args:
             app_name: Nome do aplicativo.
-            param_name: Nome do parâmetro específico (opcional, mantido para compatibilidade).
+            param_name: Nome do parâmetro específico
+            (opcional, mantido para compatibilidade).
 
         Returns:
             Dicionário com os parâmetros.
@@ -351,7 +368,7 @@ class ParamManager:
         response = requests.get(url, timeout=self._timeout, verify=False)
 
         # Verifica se a requisição foi bem-sucedida
-        if response.status_code != 200:
+        if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
 
         # Processa resposta
@@ -389,7 +406,10 @@ class ParamManager:
             Exception: Se ocorrer erro na requisição.
         """
         # Constrói URL apropriada para o parâmetro específico
-        url = f'{self._api_base_url}/parameters/apps/{app_name}/params/{param_name}'
+        url = (
+            f'{self._api_base_url}/parameters/apps/'
+            f'{app_name}/params/{param_name}'
+        )
 
         logger.info(f'Buscando parâmetro específico da API: {url}')
 
@@ -397,7 +417,7 @@ class ParamManager:
         response = requests.get(url, timeout=self._timeout, verify=False)
 
         # Verifica se a requisição foi bem-sucedida
-        if response.status_code != 200:
+        if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
 
         # Processa resposta
@@ -481,7 +501,8 @@ class ParamManager:
 
     def _is_api_error_cached(self, app_name: str) -> bool:
         """
-        Verifica se houve um erro de API recente para o app e se o cooldown ainda está ativo.
+        Verifica se houve um erro de API recente para o app
+        e se o cooldown ainda está ativo.
 
         Args:
             app_name: Nome do aplicativo.
@@ -495,29 +516,32 @@ class ParamManager:
         current_time = time.time()
         error_time = self._api_error_timestamp[app_name]
 
-        # O erro é considerado "em cache" (cooldown) se o tempo desde o erro for menor que a duração do cache
+        # O erro é considerado "em cache" (cooldown) se o
+        # tempo desde o erro for menor que a duração do cache
         return (current_time - error_time) < self._cache_duration
 
     def _save_to_local_db(self, app_name: str, params: Dict[str, Any]) -> None:
         """
-        Salva parâmetros no banco local.
-
-        Args:
-            app_name: Nome do aplicativo.
-            params: Dicionário com os parâmetros.
+        Atualiza parâmetros no banco local sem apagar os existentes.
         """
-        # Define a tabela para o app
-
         logger.info(f'Salvando parâmetros localmente para o app: {app_name}')
 
-        with self._lock:  # Aguarda a liberação do lock de outras threads
+        with self._lock:
             table = self._db.table(app_name)
 
-            # Limpa a tabela antes de inserir novos dados
-            table.truncate()
+            # Recupera o registro atual (se existir)
+            existing = table.get(doc_id=1)  # assumindo um único doc por app
 
-            # Insere os parâmetros
-            table.insert({'timestamp': time.time(), 'params': params})
+            if existing:
+                # Mescla os parâmetros antigos com os novos
+                merged_params = {**existing['params'], **params}
+                table.update(
+                    {'timestamp': time.time(), 'params': merged_params},
+                    doc_ids=[1],
+                )
+            else:
+                # Se não existe ainda, insere
+                table.insert({'timestamp': time.time(), 'params': params})
 
     def _get_from_local_db(
         self, app_name: str, param_name: Optional[str] = None
@@ -584,7 +608,8 @@ class ParamManager:
         self, app_name: Optional[str] = None, param_name: Optional[str] = None
     ) -> None:
         """
-        Limpa o cache para um app específico, um parâmetro específico ou para todos os apps.
+        Limpa o cache para um app específico, um parâmetro
+        específico ou para todos os apps.
 
         Args:
             app_name: Nome do aplicativo (opcional).
@@ -697,8 +722,10 @@ class ParamManager:
                 'error_at': dt.isoformat(),
                 'cooldown_ends_at': cooldown_ends_at.isoformat(),
                 'cooldown_remaining_seconds': int(
-                    cooldown_ends_at - datetime.fromtimestamp(time.time())
-                ).total_seconds()
+                    (
+                        cooldown_ends_at - datetime.fromtimestamp(time.time())
+                    ).total_seconds()
+                )
                 if is_cooldown_active
                 else 0,
             }

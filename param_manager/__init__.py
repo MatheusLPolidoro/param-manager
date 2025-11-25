@@ -16,14 +16,8 @@ ParamManager
 Biblioteca para gerenciamento de parâmetros.
 
 """
-
-import pathlib
-import sys
-
-sys.path.append(str(pathlib.Path(__file__).parent))
-
-from .manager import ParamManager
+from param_manager.manager import ParamManager
 
 __author__ = 'MatheusLPolidoro'
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 __all__ = ['ParamManager', 'TinyDB']
