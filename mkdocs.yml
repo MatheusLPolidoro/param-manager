@@ -1,16 +1,31 @@
 site_name: Param Manager
+nav:
+  - Docs: index.md
+  - O que é ParamManager: sobre.md
+  - Primeiros passos:
+      - Introdução: primeiros_passos.md
+      - Instalação: instalacao.md
+      - Tutorial: tutorial.md
+  - Alterações: changelog.md
+  - Estrutura: estrutura.md
 
 theme:
   name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.ico
   language: pt-BR
+  highlightjs: true
   features:
     - content.code.annotate
     - content.tabs.link
+    - content.code.copy
+    - navigation.footer
   palette:
-
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
+      primary: deep purple
+      accent: indigo
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
@@ -18,6 +33,8 @@ theme:
     # Palette toggle for dark mode
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
+      primary: deep purple
+      accent: teal
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -26,15 +43,33 @@ plugins:
   - search:
       separator: '[\s\-\.]+'
   - towncrier
+  - gen-files:
+      scripts:
+        - docs/gen_tree.py
+
+extra:
+  version:
+    provider: mike
+    
+extra_css:
+  - assets/css/extra.css
+  - assets/css/termynal.css
+
+extra_javascript:
+  - assets/js/filetree.js
+  - assets/js/termynal-init.js
+  - assets/js/termynal.js
+  - assets/js/LogoAnimation.js
 
 markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.snippets
   - attr_list
   - md_in_html
   - pymdownx.blocks.caption
   - def_list
   - pymdownx.tasklist:
       custom_checkbox: true
-  - pymdownx.snippets
   - pymdownx.emoji:
       emoji_index: !!python/name:material.extensions.emoji.twemoji
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
