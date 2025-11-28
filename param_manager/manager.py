@@ -156,13 +156,21 @@ class ParamManager:
 
                 cm_iv = bytes.fromhex(value['master_key']['iv'])
                 cm_tag = bytes.fromhex(value['master_key']['tag'])
-                cm_data = bytes.fromhex(value['master_key']['dado'])
+                
+                cm_data = bytes.fromhex(
+                    value['master_key'].get('data') or 
+                    value['master_key'].get('dado')
+                )
+
                 cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
                 chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
 
                 pw_iv = bytes.fromhex(value['crypto_data']['iv'])
                 pw_tag = bytes.fromhex(value['crypto_data']['tag'])
-                pw_data = bytes.fromhex(value['crypto_data']['dado'])
+                pw_data = bytes.fromhex(
+                    value['crypto_data'].get('data') or
+                    value['crypto_data'].get('dado')
+                )
                 cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
                 senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
 
@@ -256,14 +264,14 @@ class ParamManager:
                 # Descriptografa chave mestra
                 cm_iv = bytes.fromhex(value['master_key']['iv'])
                 cm_tag = bytes.fromhex(value['master_key']['tag'])
-                cm_data = bytes.fromhex(value['master_key']['dado'])
+                cm_data = bytes.fromhex(value['master_key']['data'])
                 cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
                 chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
 
                 # Descriptografa senha
                 pw_iv = bytes.fromhex(value['crypto_data']['iv'])
                 pw_tag = bytes.fromhex(value['crypto_data']['tag'])
-                pw_data = bytes.fromhex(value['crypto_data']['dado'])
+                pw_data = bytes.fromhex(value['crypto_data']['data'])
                 cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
                 senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
 

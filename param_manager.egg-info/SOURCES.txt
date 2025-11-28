@@ -1,5 +1,6 @@
 README.md
 pyproject.toml
+docs/gen_tree.py
 param_manager/__init__.py
 param_manager/manager.py
 param_manager.egg-info/PKG-INFO

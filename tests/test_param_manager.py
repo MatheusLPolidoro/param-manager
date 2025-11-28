@@ -504,12 +504,12 @@ def test_get_all_params_secret_success(setup_param_manager, monkeypatch):
                 "master_key": {
                     "iv": cipher_cm.nonce.hex(),
                     "tag": cm_tag.hex(),
-                    "dado": cm_data.hex(),
+                    "data": cm_data.hex(),
                 },
                 "crypto_data": {
                     "iv": cipher_pw.nonce.hex(),
                     "tag": pw_tag.hex(),
-                    "dado": pw_data.hex(),
+                    "data": pw_data.hex(),
                 },
             },
         }
@@ -533,8 +533,8 @@ def test_get_all_params_secret_missing_env(setup_param_manager, monkeypatch):
             "type": "secret",
             "value": {
                 "salt": "00",
-                "master_key": {"iv": "00", "tag": "00", "dado": "00"},
-                "crypto_data": {"iv": "00", "tag": "00", "dado": "00"},
+                "master_key": {"iv": "00", "tag": "00", "data": "00"},
+                "crypto_data": {"iv": "00", "tag": "00", "data": "00"},
             },
         }
     }
@@ -555,8 +555,8 @@ def test_get_all_params_secret_invalid_data(setup_param_manager, monkeypatch):
             "type": "secret",
             "value": {
                 "salt": "zzzz",  # inválido
-                "master_key": {"iv": "00", "tag": "00", "dado": "00"},
-                "crypto_data": {"iv": "00", "tag": "00", "dado": "00"},
+                "master_key": {"iv": "00", "tag": "00", "data": "00"},
+                "crypto_data": {"iv": "00", "tag": "00", "data": "00"},
             },
         }
     }
@@ -578,7 +578,7 @@ def test_get_all_params_secret_missing_fields(setup_param_manager, monkeypatch):
             "type": "secret",
             "value": {
                 "salt": "00",
-                "master_key": {"iv": "00", "tag": "00", "dado": "00"},
+                "master_key": {"iv": "00", "tag": "00", "data": "00"},
                 # 'crypto_data' ausente
             },
         }
@@ -796,12 +796,12 @@ def test_get_param_password_decryption_success(setup_param_manager, monkeypatch)
             "master_key": {
                 "iv": cipher_cm.nonce.hex(),
                 "tag": cm_tag.hex(),
-                "dado": cm_data.hex(),
+                "data": cm_data.hex(),
             },
             "crypto_data": {
                 "iv": cipher_pw.nonce.hex(),
                 "tag": pw_tag.hex(),
-                "dado": pw_data.hex(),
+                "data": pw_data.hex(),
             },
         }
     }
@@ -831,8 +831,8 @@ def test_get_param_password_decryption_missing_env(setup_param_manager, monkeypa
     param_manager._fetch_param_from_api = lambda app, param: {
         "value": {
             "salt": "00",
-            "master_key": {"iv": "00", "tag": "00", "dado": "00"},
-            "crypto_data": {"iv": "00", "tag": "00", "dado": "00"},
+            "master_key": {"iv": "00", "tag": "00", "data": "00"},
+            "crypto_data": {"iv": "00", "tag": "00", "data": "00"},
         }
     }
 
@@ -840,8 +840,8 @@ def test_get_param_password_decryption_missing_env(setup_param_manager, monkeypa
     # Esperado: retorna o valor bruto, já que não conseguiu descriptografar
     assert result == {
         "salt": "00",
-        "master_key": {"iv": "00", "tag": "00", "dado": "00"},
-        "crypto_data": {"iv": "00", "tag": "00", "dado": "00"},
+        "master_key": {"iv": "00", "tag": "00", "data": "00"},
+        "crypto_data": {"iv": "00", "tag": "00", "data": "00"},
     }
 
 

@@ -1,3 +1,14 @@
+Versão 0.2.5 (2025-11-28)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- Inclua compatibilidade com atualização de API de parâmetros.
+
+### :bug: CORREÇÕES
+
+- Corrija descriptografia para aceitar versão antiga e versão nova.
+
+
 Versão 0.2.2 (2025-07-10)
 
 ### :bug: CORREÇÕES
