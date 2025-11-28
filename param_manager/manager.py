@@ -156,9 +156,9 @@ class ParamManager:
 
                 cm_iv = bytes.fromhex(value['master_key']['iv'])
                 cm_tag = bytes.fromhex(value['master_key']['tag'])
-                
+
                 cm_data = bytes.fromhex(
-                    value['master_key'].get('data') or 
+                    value['master_key'].get('data') or
                     value['master_key'].get('dado')
                 )
 

@@ -8,6 +8,7 @@ param_manager.egg-info/SOURCES.txt
 param_manager.egg-info/dependency_links.txt
 param_manager.egg-info/requires.txt
 param_manager.egg-info/top_level.txt
+site/gen_tree.py
 tests/__init__.py
 tests/conftest.py
 tests/test_param_manager.py
