@@ -70,9 +70,9 @@ class ParamManager:
         load_dotenv(dotenv_path=dotenv_path)
 
         self._api_base_url = (
-            api_url or
-            os.getenv('API_PARAMS_URL', '') or
-            os.getenv('API_URL', '')
+            api_url
+            or os.getenv('API_PARAMS_URL', '')
+            or os.getenv('API_URL', '')
         )
         self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
         self._timeout = int(os.getenv('TIMEOUT', timeout))
@@ -133,19 +133,19 @@ class ParamManager:
         return params
 
     @staticmethod
-    def _process_parameter(params: dict) -> dict:
+    def _process_parameter(params: dict) -> dict | None:
         if params.get('type') == 'secret':
             raw = params.get('value')
             if isinstance(raw, dict):
                 params['value'] = ParamManager._descriptografar_param(raw)
-        if params.get('type') == 'users':
+        elif params.get('type') == 'users':
             raw: list[dict] = params['value']
             if isinstance(raw, list):
                 for item in raw:
                     item['password'] = ParamManager._descriptografar_param(
                         item['password']
                     )
-        if params.get('type') == 'user':
+        elif params.get('type') == 'user':
             raw: dict = params['value']
             if isinstance(raw, dict):
                 if 'password' in raw.keys():
@@ -153,6 +153,12 @@ class ParamManager:
                         raw['password']
                     )
         return params
+
+    @staticmethod
+    def _extract_value(param_value: dict) -> Any:
+        if param_value.get('type') in {'secret', 'users', 'user'}:
+            param_value = ParamManager._process_parameter(param_value)
+        return param_value.get('value')
 
     @staticmethod
     def _descriptografar_param(value: dict) -> str | None:
@@ -184,8 +190,8 @@ class ParamManager:
             cm_tag = bytes.fromhex(value['master_key']['tag'])
 
             cm_data = bytes.fromhex(
-                value['master_key'].get('data') or
-                value['master_key'].get('dado')
+                value['master_key'].get('data')
+                or value['master_key'].get('dado')
             )
 
             cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
@@ -194,8 +200,8 @@ class ParamManager:
             pw_iv = bytes.fromhex(value['crypto_data']['iv'])
             pw_tag = bytes.fromhex(value['crypto_data']['tag'])
             pw_data = bytes.fromhex(
-                value['crypto_data'].get('data') or
-                value['crypto_data'].get('dado')
+                value['crypto_data'].get('data')
+                or value['crypto_data'].get('dado')
             )
             cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
             senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
@@ -205,7 +211,7 @@ class ParamManager:
             logger.error(
                 f'Erro ao descriptografar parâmetro secreto: {str(e)}'
             )
-            return None    
+            return None
 
     def get_all_params(self, app_name: str) -> Dict[str, Any]:
         logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
@@ -221,7 +227,9 @@ class ParamManager:
                 f'API para {app_name} está em cooldown.'
                 f'Usando dados locais ou cache.'
             )
-            return ParamManager._process_parameters(self._get_from_local_db(app_name))
+            return ParamManager._process_parameters(
+                self._get_from_local_db(app_name)
+            )
 
         try:
             params = self._fetch_from_api(app_name)
@@ -261,7 +269,9 @@ class ParamManager:
                 f'Usando cache específico para o parâmetro:'
                 f' {param_name} do app: {app_name}'
             )
-            return ParamManager._process_parameter(self._param_cache[param_cache_key])
+            return ParamManager._extract_value(
+                self._param_cache[param_cache_key]
+            )
 
         # Verifica cache global
         if self._is_cache_valid(app_name):
@@ -273,7 +283,7 @@ class ParamManager:
             if param_value is not None:
                 self._param_cache[param_cache_key] = param_value
                 self._param_cache_timestamp[param_cache_key] = time.time()
-                return ParamManager._process_parameter(param_value)
+                return ParamManager._extract_value(param_value)
 
         # Verifica erro anterior
         if self._is_api_error_cached(app_name):
@@ -282,7 +292,7 @@ class ParamManager:
             )
             params = self._get_from_local_db(app_name, param_name)
             return (
-                ParamManager._process_parameter(params.get(param_name, dict()))
+                ParamManager._extract_value(params.get(param_name, dict()))
                 if params
                 else None
             )
@@ -292,7 +302,7 @@ class ParamManager:
             param_value = self._fetch_param_from_api(app_name, param_name)
             if not isinstance(param_value, dict):
                 param_value = dict()
-            return ParamManager._process_parameter(param_value)
+            return ParamManager._extract_value(param_value)
         except (Timeout, ConnectionError) as e:
             logger.error(
                 f'Erro de conexão/timeout ao buscar parâmetro da API: {str(e)}'
@@ -300,7 +310,7 @@ class ParamManager:
             self._api_error_timestamp[app_name] = time.time()
             params = self._handle_api_error(app_name, param_name, e)
             return (
-                ParamManager._process_parameter(params.get(param_name, dict()))
+                ParamManager._extract_value(params.get(param_name, dict()))
                 if params
                 else None
             )
@@ -310,7 +320,7 @@ class ParamManager:
             )
             params = self._handle_api_error(app_name, param_name, e)
             return (
-                ParamManager._process_parameter(params.get(param_name, dict()))
+                ParamManager._extract_value(params.get(param_name, dict()))
                 if params
                 else None
             )

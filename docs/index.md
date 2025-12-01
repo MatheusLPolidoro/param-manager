@@ -5,7 +5,7 @@
 
 ![PyPI - Version](https://img.shields.io/pypi/v/param-manager)
 ![Python](https://img.shields.io/badge/language-Python-blue?logo=python)
-![Cobertura de Testes](https://img.shields.io/badge/cobertura-99%25-brightgreen?logo=pytest)
+![Cobertura de Testes](https://img.shields.io/badge/cobertura-97%25-brightgreen?logo=pytest)
 [![Supported Python versions](https://img.shields.io/pypi/pyversions/fastapi.svg?color=%2334D058)](https://pypi.org/project/fastapi)
 
 > Esse material passa por atualizações periódicas. Você pode acompanhar as notas de alterações [aqui](changelog.md){:target="_blank"}.

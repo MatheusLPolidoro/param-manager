@@ -803,7 +803,8 @@ def test_get_param_password_decryption_success(setup_param_manager, monkeypatch)
                 "tag": pw_tag.hex(),
                 "data": pw_data.hex(),
             },
-        }
+        },
+        "type": "secret"
     }
 
     result = param_manager.get_param("test_app", "PARAM_SECRET")
