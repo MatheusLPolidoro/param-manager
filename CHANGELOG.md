@@ -1,3 +1,10 @@
+Versão 0.2.6 (2025-12-01)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- Inclua descriptografia para type user e users.
+
+
 Versão 0.2.5 (2025-11-28)
 
 ### :zap: NOVAS FUNCIONALIDADES
