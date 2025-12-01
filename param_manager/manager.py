@@ -126,73 +126,94 @@ class ParamManager:
             ParamManager(api_url, cache_duration, timeout)
         return ParamManager.__instance
 
-    def get_all_params(self, app_name: str) -> Dict[str, Any]:
-        logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
+    @staticmethod
+    def _process_parameters(params: dict) -> dict:
+        for _, p in params.items():
+            ParamManager._process_parameter(p)
+        return params
 
-        def _descriptografar_param(value: dict) -> str | None:
-            try:
-                if not all(
-                    k in value for k in ['salt', 'master_key', 'crypto_data']
-                ):
-                    return None
-
-                app_custody_key = os.getenv('CHAVE_CUSTODIA_APP') or os.getenv(
-                    'APP_CUSTODY_KEY'
-                )
-                if not app_custody_key:
-                    logger.error(
-                        '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
+    @staticmethod
+    def _process_parameter(params: dict) -> dict:
+        if params.get('type') == 'secret':
+            raw = params.get('value')
+            if isinstance(raw, dict):
+                params['value'] = ParamManager._descriptografar_param(raw)
+        if params.get('type') == 'users':
+            raw: list[dict] = params['value']
+            if isinstance(raw, list):
+                for item in raw:
+                    item['password'] = ParamManager._descriptografar_param(
+                        item['password']
                     )
-                    return None
+        if params.get('type') == 'user':
+            raw: dict = params['value']
+            if isinstance(raw, dict):
+                if 'password' in raw.keys():
+                    raw['password'] = ParamManager._descriptografar_param(
+                        raw['password']
+                    )
+        return params
 
-                salt = bytes.fromhex(value['salt'])
-                chave_custodia = PBKDF2(
-                    app_custody_key.encode(),
-                    salt,
-                    dkLen=32,
-                    count=100_000,
-                    hmac_hash_module=SHA256,
-                )
+    @staticmethod
+    def _descriptografar_param(value: dict) -> str | None:
+        try:
+            if not all(
+                k in value for k in ['salt', 'master_key', 'crypto_data']
+            ):
+                return None
 
-                cm_iv = bytes.fromhex(value['master_key']['iv'])
-                cm_tag = bytes.fromhex(value['master_key']['tag'])
-
-                cm_data = bytes.fromhex(
-                    value['master_key'].get('data') or
-                    value['master_key'].get('dado')
-                )
-
-                cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
-                chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
-
-                pw_iv = bytes.fromhex(value['crypto_data']['iv'])
-                pw_tag = bytes.fromhex(value['crypto_data']['tag'])
-                pw_data = bytes.fromhex(
-                    value['crypto_data'].get('data') or
-                    value['crypto_data'].get('dado')
-                )
-                cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
-                senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
-
-                return senha.decode()
-            except Exception as e:
+            app_custody_key = os.getenv('CHAVE_CUSTODIA_APP') or os.getenv(
+                'APP_CUSTODY_KEY'
+            )
+            if not app_custody_key:
                 logger.error(
-                    f'Erro ao descriptografar parâmetro secreto: {str(e)}'
+                    '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
                 )
                 return None
 
-        def _processar_parametros(params: dict) -> dict:
-            for nome, p in params.items():
-                if p.get('type') == 'secret':
-                    raw = p.get('value')
-                    if isinstance(raw, dict):
-                        p['value'] = _descriptografar_param(raw)
-            return params
+            salt = bytes.fromhex(value['salt'])
+            chave_custodia = PBKDF2(
+                app_custody_key.encode(),
+                salt,
+                dkLen=32,
+                count=100_000,
+                hmac_hash_module=SHA256,
+            )
+
+            cm_iv = bytes.fromhex(value['master_key']['iv'])
+            cm_tag = bytes.fromhex(value['master_key']['tag'])
+
+            cm_data = bytes.fromhex(
+                value['master_key'].get('data') or
+                value['master_key'].get('dado')
+            )
+
+            cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
+            chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
+
+            pw_iv = bytes.fromhex(value['crypto_data']['iv'])
+            pw_tag = bytes.fromhex(value['crypto_data']['tag'])
+            pw_data = bytes.fromhex(
+                value['crypto_data'].get('data') or
+                value['crypto_data'].get('dado')
+            )
+            cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
+            senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
+
+            return senha.decode()
+        except Exception as e:
+            logger.error(
+                f'Erro ao descriptografar parâmetro secreto: {str(e)}'
+            )
+            return None    
+
+    def get_all_params(self, app_name: str) -> Dict[str, Any]:
+        logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
 
         # Verifica cache
         if self._is_cache_valid(app_name):
             logger.info(f'Usando cache para o app: {app_name}')
-            return _processar_parametros(self._cache[app_name])
+            return ParamManager._process_parameters(self._cache[app_name])
 
         # Verifica erro de API anterior
         if self._is_api_error_cached(app_name):
@@ -200,20 +221,20 @@ class ParamManager:
                 f'API para {app_name} está em cooldown.'
                 f'Usando dados locais ou cache.'
             )
-            return _processar_parametros(self._get_from_local_db(app_name))
+            return ParamManager._process_parameters(self._get_from_local_db(app_name))
 
         try:
             params = self._fetch_from_api(app_name)
-            return _processar_parametros(params)
+            return ParamManager._process_parameters(params)
         except (Timeout, ConnectionError) as e:
             logger.error(f'Erro de conexão/timeout: {str(e)}')
             self._api_error_timestamp[app_name] = time.time()
-            return _processar_parametros(
+            return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
         except Exception as e:
             logger.error(f'Erro inesperado ao buscar da API: {str(e)}')
-            return _processar_parametros(
+            return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
 
@@ -234,69 +255,13 @@ class ParamManager:
         )
         param_cache_key = f'{app_name}:{param_name}'
 
-        def _descriptografar_password(value: dict) -> str | None:
-            try:
-                if not all(
-                    k in value for k in ['salt', 'master_key', 'crypto_data']
-                ):
-                    return None
-
-                if not (
-                    app_custody_key := (
-                        os.getenv('CHAVE_CUSTODIA_APP')
-                        or os.getenv('APP_CUSTODY_KEY')
-                    )
-                ):
-                    logger.error(
-                        '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
-                    )
-                    return None
-
-                salt = bytes.fromhex(value['salt'])
-                chave_custodia = PBKDF2(
-                    app_custody_key.encode(),
-                    salt,
-                    dkLen=32,
-                    count=100_000,
-                    hmac_hash_module=SHA256,
-                )
-
-                # Descriptografa chave mestra
-                cm_iv = bytes.fromhex(value['master_key']['iv'])
-                cm_tag = bytes.fromhex(value['master_key']['tag'])
-                cm_data = bytes.fromhex(value['master_key']['data'])
-                cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
-                chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
-
-                # Descriptografa senha
-                pw_iv = bytes.fromhex(value['crypto_data']['iv'])
-                pw_tag = bytes.fromhex(value['crypto_data']['tag'])
-                pw_data = bytes.fromhex(value['crypto_data']['data'])
-                cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
-                senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
-
-                return senha.decode()
-            except Exception as e:
-                logger.error(
-                    f'Falha na descriptografia do parâmetro {param_name}:'
-                    f' {str(e)}'
-                )
-                return None
-
-        def _extract_value(param_value: dict) -> Any:
-            raw = param_value.get('value')
-            if isinstance(raw, dict):
-                decrypted = _descriptografar_password(raw)
-                return decrypted if decrypted is not None else raw
-            return raw
-
         # Verifica cache específico
         if self._is_param_cache_valid(app_name, param_name):
             logger.info(
                 f'Usando cache específico para o parâmetro:'
                 f' {param_name} do app: {app_name}'
             )
-            return _extract_value(self._param_cache[param_cache_key])
+            return ParamManager._process_parameter(self._param_cache[param_cache_key])
 
         # Verifica cache global
         if self._is_cache_valid(app_name):
@@ -308,7 +273,7 @@ class ParamManager:
             if param_value is not None:
                 self._param_cache[param_cache_key] = param_value
                 self._param_cache_timestamp[param_cache_key] = time.time()
-                return _extract_value(param_value)
+                return ParamManager._process_parameter(param_value)
 
         # Verifica erro anterior
         if self._is_api_error_cached(app_name):
@@ -317,7 +282,7 @@ class ParamManager:
             )
             params = self._get_from_local_db(app_name, param_name)
             return (
-                _extract_value(params.get(param_name, dict()))
+                ParamManager._process_parameter(params.get(param_name, dict()))
                 if params
                 else None
             )
@@ -327,7 +292,7 @@ class ParamManager:
             param_value = self._fetch_param_from_api(app_name, param_name)
             if not isinstance(param_value, dict):
                 param_value = dict()
-            return _extract_value(param_value)
+            return ParamManager._process_parameter(param_value)
         except (Timeout, ConnectionError) as e:
             logger.error(
                 f'Erro de conexão/timeout ao buscar parâmetro da API: {str(e)}'
@@ -335,7 +300,7 @@ class ParamManager:
             self._api_error_timestamp[app_name] = time.time()
             params = self._handle_api_error(app_name, param_name, e)
             return (
-                _extract_value(params.get(param_name, dict()))
+                ParamManager._process_parameter(params.get(param_name, dict()))
                 if params
                 else None
             )
@@ -345,7 +310,7 @@ class ParamManager:
             )
             params = self._handle_api_error(app_name, param_name, e)
             return (
-                _extract_value(params.get(param_name, dict()))
+                ParamManager._process_parameter(params.get(param_name, dict()))
                 if params
                 else None
             )
