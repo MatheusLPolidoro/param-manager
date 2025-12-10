@@ -76,6 +76,12 @@ class ParamManager:
         )
         self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
         self._timeout = int(os.getenv('TIMEOUT', timeout))
+        self._token = None
+        self._refresh_token = None
+        self._token_expire_at = 0
+        self._username = os.getenv('PARAMS_USERNAME')
+        self._password = os.getenv('PARAMS_PASSWORD')
+
         self._lock = threading.Lock()
 
         env_db_path = os.getenv('LOCAL_DB_PATH')
@@ -125,6 +131,146 @@ class ParamManager:
         if ParamManager.__instance is None:
             ParamManager(api_url, cache_duration, timeout)
         return ParamManager.__instance
+
+    def _auth_get_token(self):
+        if not self._username or not self._password:
+            raise ValueError(
+                'Username ou password não configurados para autenticação.'
+            )
+
+        url = f'{self._api_base_url}/auth/token'
+
+        data = {
+            'username': self._username,
+            'password': self._password,
+        }
+
+        res = requests.post(url, data=data)
+
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Falha ao autenticar: {res.text}')
+
+        auth_data = res.json()
+        self._token = auth_data.get('access_token')
+        self._refresh_token = auth_data.get('refresh_token')
+
+        # token TTL: 30 min
+        self._token_expire_at = time.time() + 29 * 60
+
+        return self._token
+
+    def _auth_refresh_token(self):
+        if not self._refresh_token:
+            return self._auth_get_token()
+
+        url = f'{self._api_base_url}/auth/refresh'
+
+        data = {
+            'refresh_token': self._refresh_token,
+        }
+
+        res = requests.post(url, data=data)
+
+        if res.status_code != HTTPStatus.OK:
+            return self._auth_get_token()
+
+        auth_data = res.json()
+        self._token = auth_data.get('access_token')
+        self._refresh_token = auth_data.get('refresh_token')
+
+        self._token_expire_at = time.time() + 29 * 60
+
+        return self._token
+
+    def _get_valid_token(self):
+        if not self._token:
+            return self._auth_get_token()
+
+        if time.time() >= self._token_expire_at:
+            return self._auth_refresh_token()
+
+        return self._token
+
+    def _auth_headers(self):
+        token = self._get_valid_token()
+        return {'Authorization': f'Bearer {token}'}
+
+    def create_app(self, name: str, description: str | None = None):
+        url = f'{self._api_base_url}/parameters/apps/'
+
+        payload = {'name': name, 'description': description}
+
+        res = requests.post(
+            url,
+            json=payload,
+            headers=self._auth_headers(),
+            timeout=self._timeout,
+        )
+
+        if res.status_code != HTTPStatus.CREATED:
+            raise Exception(f'Erro ao criar app: {res.text}')
+
+        return res.json()
+
+    def upsert_params(self, app_name: str, params: dict):
+        """
+        params: { "param_name": { "value": ..., "type": ..., ... } }
+        """
+        url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
+
+        res = requests.put(
+            url,
+            json=params,
+            headers=self._auth_headers(),
+            timeout=self._timeout,
+        )
+
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao fazer upsert de parâmetros: {res.text}')
+
+        # Atualiza cache local
+        self._cache[app_name] = res.json().get('params', {})
+        self._cache_timestamp[app_name] = time.time()
+
+        self._save_to_local_db(app_name, self._cache[app_name])
+
+        return res.json()
+
+    def delete_param(self, app_name: str, param_name: str):
+        url = (
+            f'{self._api_base_url}/parameters/apps/'
+            f'{app_name}/params/{param_name}'
+        )
+
+        res = requests.delete(
+            url, headers=self._auth_headers(), timeout=self._timeout
+        )
+
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao deletar parâmetro: {res.text}')
+
+        # Remove do cache local
+        if app_name in self._cache:
+            self._cache[app_name].pop(param_name, None)
+
+        self._save_to_local_db(app_name, self._cache.get(app_name, {}))
+
+        return res.json()
+
+    def delete_app(self, app_name: str):
+        url = f'{self._api_base_url}/parameters/apps/{app_name}'
+
+        res = requests.delete(
+            url, headers=self._auth_headers(), timeout=self._timeout
+        )
+
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao deletar app: {res.text}')
+
+        # limpa caches locais
+        self.clear_cache(app_name)
+
+        return res.json()
 
     @staticmethod
     def _process_parameters(params: dict) -> dict:
@@ -359,7 +505,6 @@ class ParamManager:
 
         # Extrai parâmetros da resposta
         params = data.get('params', {})
-        print(len(params))
 
         # Atualiza cache e timestamp
         self._cache[app_name] = params

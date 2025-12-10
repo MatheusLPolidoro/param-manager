@@ -1,44 +1,58 @@
 import os
 import pytest
-from param_manager.manager import ParamManager
 from unittest.mock import patch, MagicMock
+from param_manager.manager import ParamManager
 
 
 @pytest.fixture
-def setup_param_manager():
-    """Fixture para configurar o ambiente de teste para o ParamManager."""
-    # Limpa a instância singleton entre os testes
+def setup_param_manager(requests_mock, monkeypatch):
+    """
+    Fixture principal para inicializar o ParamManager totalmente isolado.
+    - Reseta singleton
+    - Mocka TinyDB
+    - Prepara diretório temporário
+    - Injeta mocks de requisição
+    """
+    # Reset do Singleton
     ParamManager._ParamManager__instance = None
 
-    # Cria um diretório temporário para o banco de dados de teste
+    # Diretório temporário para DB
     test_db_dir = os.path.join(os.path.expanduser('~'), 'param_manager_test')
     os.makedirs(test_db_dir, exist_ok=True)
     test_db_path = os.path.join(test_db_dir, 'test_params_db.json')
+    # Simula variáveis do .env
+    monkeypatch.setenv("PARAMS_USERNAME", "test_user")
+    monkeypatch.setenv("PARAMS_PASSWORD", "secret_pass")
+    monkeypatch.setenv("API_PARAMS_URL", "")      # força uso do api_url da fixture
+    monkeypatch.setenv("CHAVE_CUSTODIA_APP", "123456") # valor dummy
 
-    # Mock para o TinyDB
+    # Mock de TinyDB
     with patch('param_manager.manager.TinyDB') as mock_db:
         mock_db_instance = MagicMock()
         mock_db.return_value = mock_db_instance
 
-        # Mock para a tabela do TinyDB
         mock_table = MagicMock()
         mock_db_instance.table.return_value = mock_table
 
-        # Cria a instância do ParamManager com URL de API de teste
-        param_manager = ParamManager.get_instance(
+        # Cria instância
+        pm = ParamManager(
             api_url='http://test-api.example.com',
-            cache_duration=60,  # 1 minuto para facilitar os testes
+            cache_duration=60,
             timeout=2,
+            local_db_path=test_db_dir,
         )
 
-        # Retorna os objetos necessários para os testes
-        yield param_manager, mock_table
+        # Zera tokens
+        pm._token = None
+        pm._refresh_token = None
+        pm._token_expire_at = 0
 
-    # Limpeza após o teste
+        yield pm, mock_table, requests_mock
+
+    # cleanup
     if os.path.exists(test_db_path):
         os.remove(test_db_path)
 
-    # Remove o diretório de teste se estiver vazio
     try:
         os.rmdir(test_db_dir)
     except OSError:

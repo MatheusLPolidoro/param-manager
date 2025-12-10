@@ -3,7 +3,6 @@ from http import HTTPStatus
 import os
 import sys
 import time
-import unicodedata
 import pytest
 import requests
 import param_manager.manager as manager
@@ -157,7 +156,7 @@ def test_get_param_from_api_with_individual_cache(
     setup_param_manager, mock_response_data
 ):
     """Testa a recuperação de um parâmetro específico com cache individual."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Configura o mock para requests.get
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -209,7 +208,7 @@ def test_get_param_from_api_with_individual_cache(
 )
 def test_get_param_from_global_cache(setup_param_manager, mock_response_data):
     """Testa a recuperação de um parâmetro do cache global quando não há cache específico."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Configura o mock para requests.get para a chamada de todos os parâmetros
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -253,7 +252,7 @@ def test_cache_expiration_for_individual_param(
     setup_param_manager, mock_response_data
 ):
     """Testa a expiração do cache para um parâmetro individual."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Configura o mock para requests.get
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -289,7 +288,7 @@ def test_clear_cache_for_individual_param(
     setup_param_manager, mock_response_data
 ):
     """Testa a limpeza do cache para um parâmetro individual."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Configura o mock para requests.get
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -322,7 +321,7 @@ def test_clear_cache_for_app_clears_all_related_params(
     setup_param_manager, mock_response_data
 ):
     """Testa se a limpeza do cache de um app limpa todos os parâmetros relacionados."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Configura o mock para requests.get
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -352,7 +351,7 @@ def test_clear_cache_for_app_clears_all_related_params(
 
 def test_api_error_fallback_for_individual_param(setup_param_manager):
     """Testa o fallback para dados locais quando a API falha para um parâmetro individual."""
-    param_manager, mock_table = setup_param_manager
+    param_manager, mock_table, _ = setup_param_manager
 
     # Configura o mock para requests.get para lançar uma exceção
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -383,7 +382,7 @@ def test_api_error_fallback_for_individual_param(setup_param_manager):
 
 def test_api_error_fallback_for_all_params(setup_param_manager):
     """Testa o fallback para dados locais quando a API falha para um parâmetro individual."""
-    param_manager, mock_table = setup_param_manager
+    param_manager, mock_table, _ = setup_param_manager
 
     # Configura o mock para requests.get para lançar uma exceção
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -418,7 +417,7 @@ def test_api_error_fallback_for_all_params(setup_param_manager):
 )
 def test_api_error_status_code(setup_param_manager, mock_response_data):
     """Testa se o a chamada da API retorna algo diferente de 200"""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Define uma duração de cache muito curta para o teste
     param_manager._cache_duration = 0  # 100ms
@@ -451,7 +450,7 @@ def test_get_cache_info_includes_param_cache(
     setup_param_manager, mock_response_data
 ):
     """Testa se o método get_cache_info inclui informações sobre o cache de parâmetros individuais."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Configura o mock para requests.get
     with patch('param_manager.manager.requests.get') as mock_get:
@@ -479,7 +478,7 @@ def test_get_cache_info_includes_param_cache(
 
 def test_get_all_params_secret_success(setup_param_manager, monkeypatch):
     """Testa se get_all_params descriptografa corretamente parâmetros secretos."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Define variável de ambiente necessária
     monkeypatch.setenv("CHAVE_CUSTODIA_APP", "segredo_teste")
@@ -525,7 +524,7 @@ def test_get_all_params_secret_success(setup_param_manager, monkeypatch):
 
 def test_get_all_params_secret_missing_env(setup_param_manager, monkeypatch):
     """Retorna None se CHAVE_CUSTODIA_APP não estiver definida."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     monkeypatch.delenv("CHAVE_CUSTODIA_APP", raising=False)
 
     params = {
@@ -547,7 +546,7 @@ def test_get_all_params_secret_missing_env(setup_param_manager, monkeypatch):
 
 def test_get_all_params_secret_invalid_data(setup_param_manager, monkeypatch):
     """Retorna None se os dados criptografados forem inválidos."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     monkeypatch.setenv("CHAVE_CUSTODIA_APP", "segredo_teste")
 
     params = {
@@ -569,7 +568,7 @@ def test_get_all_params_secret_invalid_data(setup_param_manager, monkeypatch):
 
 def test_get_all_params_secret_missing_fields(setup_param_manager, monkeypatch):
     """Retorna None se o dicionário do parâmetro secreto não tiver todos os campos obrigatórios."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     monkeypatch.setenv("CHAVE_CUSTODIA_APP", "segredo_teste")
 
     # Valor incompleto: falta 'crypto_data'
@@ -595,7 +594,7 @@ def test_get_all_params_secret_missing_fields(setup_param_manager, monkeypatch):
 
 def test_get_all_params_uses_local_on_api_error_cached(setup_param_manager):
     """Testa se get_all_params usa dados locais quando há erro de API anterior (cooldown)."""
-    param_manager, mock_table = setup_param_manager
+    param_manager, mock_table, requests = setup_param_manager
 
     # Força o estado de erro de API anterior
     param_manager._is_api_error_cached = lambda app_name: True
@@ -618,7 +617,7 @@ def test_get_all_params_uses_local_on_api_error_cached(setup_param_manager):
 
 def test_get_all_params_timeout_or_connection_error(setup_param_manager):
     """Testa se get_all_params trata Timeout/ConnectionError corretamente."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Força _fetch_from_api a lançar Timeout
     def fake_fetch(app_name):
@@ -643,7 +642,7 @@ def test_get_all_params_timeout_or_connection_error(setup_param_manager):
 
 def test_get_all_params_timeout_or_connection_error(setup_param_manager):
     """Testa se get_all_params trata Timeout/ConnectionError corretamente."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Força _fetch_from_api a lançar Timeout
     def fake_fetch(app_name):
@@ -668,7 +667,7 @@ def test_get_all_params_timeout_or_connection_error(setup_param_manager):
 
 def test_get_all_params_connection_error(setup_param_manager):
     """Testa se get_all_params trata ConnectionError corretamente."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Força _fetch_from_api a lançar ConnectionError
     def fake_fetch(app_name):
@@ -697,7 +696,7 @@ from Crypto.Hash import SHA256
 
 def test_get_param_from_specific_cache(setup_param_manager):
     """Testa retorno do cache específico."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._param_cache["test_app:PARAM1"] = {"value": "cached_value"}
     param_manager._param_cache_timestamp["test_app:PARAM1"] = time.time()
 
@@ -710,7 +709,7 @@ def test_get_param_from_specific_cache(setup_param_manager):
 
 def test_get_param_from_global_cache(setup_param_manager):
     """Testa retorno do cache global quando não há cache específico."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache["test_app"] = {"PARAM1": {"value": "global_value"}}
     param_manager._is_cache_valid = lambda app: True
 
@@ -721,7 +720,7 @@ def test_get_param_from_global_cache(setup_param_manager):
 
 def test_get_param_api_error_cached(setup_param_manager):
     """Testa retorno de dados locais quando há erro de API anterior."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._is_api_error_cached = lambda app: True
     param_manager._get_from_local_db = lambda app, param: {"PARAM1": {"value": "local_value"}}
 
@@ -731,7 +730,7 @@ def test_get_param_api_error_cached(setup_param_manager):
 
 def test_get_param_fetch_from_api_success(setup_param_manager):
     """Testa busca de parâmetro diretamente da API."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._is_param_cache_valid = lambda app, param: False
     param_manager._is_cache_valid = lambda app: False
     param_manager._is_api_error_cached = lambda app: False
@@ -743,7 +742,7 @@ def test_get_param_fetch_from_api_success(setup_param_manager):
 
 def test_get_param_fetch_from_api_timeout(setup_param_manager):
     """Testa fallback quando ocorre Timeout na API."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._fetch_param_from_api = lambda app, param: (_ for _ in ()).throw(Timeout("timeout"))
     param_manager._handle_api_error = lambda app, param, e: {"PARAM1": {"value": "fallback_value"}}
 
@@ -754,7 +753,7 @@ def test_get_param_fetch_from_api_timeout(setup_param_manager):
 
 def test_get_param_fetch_from_api_connection_error(setup_param_manager):
     """Testa fallback quando ocorre ConnectionError na API."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._fetch_param_from_api = lambda app, param: (_ for _ in ()).throw(ConnectionError("conn error"))
     param_manager._handle_api_error = lambda app, param, e: {"PARAM1": {"value": "fallback_value"}}
 
@@ -765,7 +764,7 @@ def test_get_param_fetch_from_api_connection_error(setup_param_manager):
 
 def test_get_param_fetch_from_api_unexpected_error(setup_param_manager):
     """Testa fallback quando ocorre erro inesperado na API."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._fetch_param_from_api = lambda app, param: (_ for _ in ()).throw(RuntimeError("unexpected"))
     param_manager._handle_api_error = lambda app, param, e: {"PARAM1": {"value": "fallback_value"}}
 
@@ -775,7 +774,7 @@ def test_get_param_fetch_from_api_unexpected_error(setup_param_manager):
 
 def test_get_param_password_decryption_success(setup_param_manager, monkeypatch):
     """Testa descriptografia de parâmetro do tipo password."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     monkeypatch.setenv("CHAVE_CUSTODIA_APP", "segredo_teste")
 
     # Gera dados criptografados válidos
@@ -813,7 +812,7 @@ def test_get_param_password_decryption_success(setup_param_manager, monkeypatch)
 
 def test_get_param_password_decryption_missing_fields(setup_param_manager, monkeypatch):
     """Retorna o valor bruto se faltar campos obrigatórios no parâmetro password."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     monkeypatch.setenv("CHAVE_CUSTODIA_APP", "segredo_teste")
 
     param_manager._fetch_param_from_api = lambda app, param: {
@@ -826,7 +825,7 @@ def test_get_param_password_decryption_missing_fields(setup_param_manager, monke
 
 def test_get_param_password_decryption_missing_env(setup_param_manager, monkeypatch):
     """Retorna o valor bruto se variável de ambiente não estiver definida."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     monkeypatch.delenv("CHAVE_CUSTODIA_APP", raising=False)
 
     param_manager._fetch_param_from_api = lambda app, param: {
@@ -848,7 +847,7 @@ def test_get_param_password_decryption_missing_env(setup_param_manager, monkeypa
 
 def test_fetch_from_api_success(setup_param_manager):
     """Testa fluxo feliz: API retorna 200 e dados válidos."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     mock_response_data = {
         "params": {
@@ -885,7 +884,7 @@ def test_fetch_from_api_success(setup_param_manager):
 
 def test_fetch_from_api_status_code_error(setup_param_manager):
     """Testa quando API retorna status diferente de 200."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     with patch("param_manager.manager.requests.get") as mock_get:
         mock_response = MagicMock()
@@ -900,7 +899,7 @@ def test_fetch_from_api_status_code_error(setup_param_manager):
 
 def test_fetch_from_api_empty_params(setup_param_manager):
     """Testa quando API retorna resposta sem 'params'."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     mock_response_data = {"other_key": "no_params_here"}
 
@@ -927,7 +926,7 @@ def test_fetch_from_api_empty_params(setup_param_manager):
 
 def test_fetch_from_api_json_error(setup_param_manager):
     """Testa quando response.json lança exceção."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     with patch("param_manager.manager.requests.get") as mock_get:
         mock_response = MagicMock()
@@ -941,7 +940,7 @@ def test_fetch_from_api_json_error(setup_param_manager):
 
 def test_fetch_param_from_api_clears_error_timestamp(setup_param_manager):
     """Testa se _fetch_param_from_api remove o timestamp de erro após sucesso da API."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Simula que o app já está em erro
     param_manager._api_error_timestamp["test_app"] = 123456789.0
@@ -977,7 +976,7 @@ def test_fetch_param_from_api_clears_error_timestamp(setup_param_manager):
 
 def test_is_cache_valid_true(setup_param_manager):
     """Retorna True quando o cache é recente (dentro do cache_duration)."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 60  # 60 segundos
 
     # Simula cache criado agora
@@ -989,7 +988,7 @@ def test_is_cache_valid_true(setup_param_manager):
 
 def test_is_cache_valid_false_expired(setup_param_manager):
     """Retorna False quando o cache está expirado (fora do cache_duration)."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 1  # 1 segundo
 
     # Simula cache criado há 5 segundos
@@ -1001,7 +1000,7 @@ def test_is_cache_valid_false_expired(setup_param_manager):
 
 def test_is_api_error_cached_app_not_in_timestamp(setup_param_manager):
     """Retorna False se o app não estiver em _api_error_timestamp."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Nenhum erro registrado
     assert param_manager._is_api_error_cached("test_app") is False
@@ -1009,7 +1008,7 @@ def test_is_api_error_cached_app_not_in_timestamp(setup_param_manager):
 
 def test_is_api_error_cached_true_recent_error(setup_param_manager):
     """Retorna True se o erro for recente (dentro do cache_duration)."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 60  # 60 segundos
 
     # Simula erro ocorrido agora
@@ -1020,7 +1019,7 @@ def test_is_api_error_cached_true_recent_error(setup_param_manager):
 
 def test_is_api_error_cached_false_expired_error(setup_param_manager):
     """Retorna False se o erro for antigo (fora do cache_duration)."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 1  # 1 segundo
 
     # Simula erro ocorrido há 5 segundos
@@ -1031,7 +1030,7 @@ def test_is_api_error_cached_false_expired_error(setup_param_manager):
 
 def test_get_from_local_db_no_records(setup_param_manager, caplog):
     """Retorna {} e gera warning quando não há registros locais para o app."""
-    param_manager, mock_table = setup_param_manager
+    param_manager, mock_table, requests = setup_param_manager
 
     # Simula que não há registros no banco local
     mock_table.all.return_value = []
@@ -1053,7 +1052,7 @@ def test_get_from_local_db_no_records(setup_param_manager, caplog):
 
 def test_api_error_timestamp_removed_on_success(setup_param_manager):
     """Testa se o timestamp de erro é removido após sucesso da API."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Simula que o app já está marcado com erro
     param_manager._api_error_timestamp["test_app"] = 123456789.0
@@ -1083,7 +1082,7 @@ def test_api_error_timestamp_removed_on_success(setup_param_manager):
 
 def test_clear_cache_app_level_removes_api_error_timestamp(setup_param_manager):
     """Testa se clear_cache remove o timestamp de erro quando limpa cache de um app específico."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Simula dados de cache e erro para o app
     param_manager._cache["test_app"] = {"PARAM1": {"value": "value1"}}
@@ -1101,7 +1100,7 @@ def test_clear_cache_app_level_removes_api_error_timestamp(setup_param_manager):
 
 def test_clear_cache_all_clears_everything(setup_param_manager, caplog):
     """Testa se clear_cache limpa todos os caches quando nenhum parâmetro é fornecido."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
 
     # Simula dados em todos os caches
     param_manager._cache = {"app1": {"PARAM1": {"value": "value1"}}}
@@ -1128,7 +1127,7 @@ def test_clear_cache_all_clears_everything(setup_param_manager, caplog):
 
 def test_cache_info_with_valid_cache(setup_param_manager):
     """Testa se cache_info retorna timestamps corretos quando cache é válido."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 60  # 60 segundos
 
     # Simula cache criado agora
@@ -1158,7 +1157,7 @@ def test_cache_info_with_valid_cache(setup_param_manager):
 
 def test_cache_info_with_expired_cache(setup_param_manager):
     """Testa se cache_info retorna seconds_remaining=0 quando cache está expirado."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 1  # 1 segundo
 
     # Simula cache criado há 5 segundos (expirado)
@@ -1179,7 +1178,7 @@ def test_cache_info_with_expired_cache(setup_param_manager):
 
 def test_cache_info_with_recent_api_error(setup_param_manager):
     """Retorna info correta quando há erro de API recente (cooldown ativo)."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 60  # 60 segundos
 
     # Simula erro ocorrido agora
@@ -1205,7 +1204,7 @@ def test_cache_info_with_recent_api_error(setup_param_manager):
 
 def test_cache_info_with_expired_api_error(setup_param_manager):
     """Retorna info correta quando erro de API está expirado (cooldown inativo)."""
-    param_manager, _ = setup_param_manager
+    param_manager, *_ = setup_param_manager
     param_manager._cache_duration = 1  # 1 segundo
 
     # Simula erro ocorrido há 5 segundos (expirado)
