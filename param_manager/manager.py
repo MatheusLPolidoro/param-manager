@@ -45,13 +45,23 @@ class ParamManager:
             logger.info('Nova instância do ParamManager criada')
         return cls.__instance
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 PLR0917
         self,
         api_url: str | None = None,
         cache_duration: int = 3600,
         timeout: int = 5,
         local_db_path: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
     ):
+        self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
+        self._timeout = int(os.getenv('TIMEOUT', timeout))
+        self._token = None
+        self._refresh_token = None
+        self._token_expire_at = 0
+        self._username = os.getenv('PARAMS_USERNAME', username)
+        self._password = os.getenv('PARAMS_PASSWORD', password)
+
         # Evita reinicialização
         if hasattr(self, '_initialized') and self._initialized:
             return
@@ -74,14 +84,6 @@ class ParamManager:
             or os.getenv('API_PARAMS_URL', '')
             or os.getenv('API_URL', '')
         )
-        self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
-        self._timeout = int(os.getenv('TIMEOUT', timeout))
-        self._token = None
-        self._refresh_token = None
-        self._token_expire_at = 0
-        self._username = os.getenv('PARAMS_USERNAME')
-        self._password = os.getenv('PARAMS_PASSWORD')
-
         self._lock = threading.Lock()
 
         env_db_path = os.getenv('LOCAL_DB_PATH')
