@@ -117,7 +117,11 @@ class ParamManager:
 
     @staticmethod
     def get_instance(
-        api_url: str = None, cache_duration: int = 3600, timeout: int = 5
+        api_url: str = None,
+        cache_duration: int = 3600,
+        timeout: int = 5,
+        *args,
+        **kwargs
     ) -> 'ParamManager':
         """
         Método estático para obter a instância única.
@@ -131,7 +135,7 @@ class ParamManager:
             A instância única de ParamManager.
         """
         if ParamManager.__instance is None:
-            ParamManager(api_url, cache_duration, timeout)
+            ParamManager(api_url, cache_duration, timeout, *args, **kwargs)
         return ParamManager.__instance
 
     def _auth_get_token(self):

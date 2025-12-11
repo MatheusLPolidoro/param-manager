@@ -11,4 +11,7 @@ param_manager.egg-info/top_level.txt
 site/gen_tree.py
 tests/__init__.py
 tests/conftest.py
+tests/test_apps.py
+tests/test_auth.py
 tests/test_param_manager.py
+tests/test_params.py
