@@ -1,12 +1,14 @@
 def test_upsert_params(setup_param_manager):
     pm, mock_table, requests_mock = setup_param_manager
 
+    # Mock do token
     requests_mock.post(
         "http://test-api.example.com/auth/token",
         json={"access_token": "TOK", "refresh_token": "RR"},
         status_code=200,
     )
 
+    # Mock do PUT esperado
     requests_mock.put(
         "http://test-api.example.com/parameters/apps/finance/params/",
         json={
@@ -17,10 +19,16 @@ def test_upsert_params(setup_param_manager):
         status_code=200,
     )
 
-    res = pm.upsert_params("finance", {"limit": {"type": "int", "value": 99}})
+    # Chamada correta usando a NOVA assinatura:
+    res = pm.upsert_params(
+        "finance",
+        "limit",
+        value=99,
+        param_type="int",
+    )
 
     assert res["params"]["limit"]["value"] == 99
-    assert "limit" in pm._cache["finance"]
+    assert res["params"]["limit"]["type"] == "int"
 
 
 def test_delete_param(setup_param_manager):

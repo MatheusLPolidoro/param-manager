@@ -121,7 +121,7 @@ class ParamManager:
         cache_duration: int = 3600,
         timeout: int = 5,
         *args,
-        **kwargs
+        **kwargs,
     ) -> 'ParamManager':
         """
         Método estático para obter a instância única.
@@ -218,15 +218,56 @@ class ParamManager:
 
         return res.json()
 
-    def upsert_params(self, app_name: str, params: dict):
+    def upsert_params(  # noqa: PLR0913 PLR0917
+        self,
+        app_name: str,
+        param_name: str,
+        *,
+        value: Any,
+        param_type: str,
+        description: str | None = None,
+        user_editable: bool | None = False,
+        min_length: int | None = None,
+        max_length: int | None = None,
+        min_value: int | float | None = None,
+        max_value: int | float | None = None,
+        referenced_params: list[str] | None = None,
+    ):
         """
-        params: { "param_name": { "value": ..., "type": ..., ... } }
+        Upsert de parâmetro com payload limpo e automático,
+        respeitando 100% o schema do OpenAPI.
         """
+
+        # Campos obrigatórios
+        payload = {
+            param_name: {
+                'value': value,
+                'type': param_type,
+            }
+        }
+
+        # Campos opcionais → adicionados dinamicamente
+        optional_fields = {
+            'description': description,
+            'user_editable': user_editable,
+            'min_length': min_length,
+            'max_length': max_length,
+            'min_value': min_value,
+            'max_value': max_value,
+            'referenced_params': referenced_params,
+        }
+
+        # adiciona apenas valores que não são None
+        payload[param_name].update({
+            key: val for key, val in optional_fields.items() if val is not None
+        })
+
+        # Endpoint
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
 
         res = requests.put(
             url,
-            json=params,
+            json=payload,
             headers=self._auth_headers(),
             timeout=self._timeout,
         )
@@ -234,10 +275,9 @@ class ParamManager:
         if res.status_code != HTTPStatus.OK:
             raise Exception(f'Erro ao fazer upsert de parâmetros: {res.text}')
 
-        # Atualiza cache local
+        # Cache
         self._cache[app_name] = res.json().get('params', {})
         self._cache_timestamp[app_name] = time.time()
-
         self._save_to_local_db(app_name, self._cache[app_name])
 
         return res.json()
