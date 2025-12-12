@@ -1,3 +1,18 @@
+Versão 0.1.6 (2025-12-12)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- Inclua métodos para criação/deleção e atualização de aplicações e parâmetros.
+
+### :open_file_folder: DOCUMENTAÇÃO
+
+- Inclua informações sobre novos parâmetros de criação, atualização e remoção de aplicativos e parâmetros.
+
+### :test_tube: TESTES
+
+- Inclusa novos testes para novos métodos de criação, deleção e atualização de aplicações e parâmetros.
+
+
 Versão 0.2.6 (2025-12-01)
 
 ### :zap: NOVAS FUNCIONALIDADES
