@@ -1,4 +1,4 @@
-Versão 0.1.6 (2025-12-12)
+Versão 0.3.0 (2025-12-12)
 
 ### :zap: NOVAS FUNCIONALIDADES
 
