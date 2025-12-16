@@ -1,3 +1,9 @@
+Versão 0.3.1 (2025-12-16)
+
+### :bug: CORREÇÕES
+- Inclua parâmetro save_cache para definir se ira ou não salvar do .db local.
+
+
 Versão 0.3.0 (2025-12-12)
 
 ### :zap: NOVAS FUNCIONALIDADES
