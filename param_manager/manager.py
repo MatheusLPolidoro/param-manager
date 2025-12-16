@@ -84,7 +84,7 @@ class ParamManager:
             or os.getenv('API_PARAMS_URL', '')
             or os.getenv('API_URL', '')
         )
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
 
         env_db_path = os.getenv('LOCAL_DB_PATH')
         if local_db_path and os.path.exists(local_db_path):
@@ -438,7 +438,9 @@ class ParamManager:
                 self._handle_api_error(app_name, None, e)
             )
 
-    def get_param(self, app_name: str, param_name: str) -> Any:
+    def get_param(
+        self, app_name: str, param_name: str, save_cache: bool = True
+    ) -> Any:
         """
         Recupera um parâmetro específico de um app.
 
@@ -518,7 +520,10 @@ class ParamManager:
             )
 
     def _fetch_from_api(
-        self, app_name: str, param_name: Optional[str] = None
+        self,
+        app_name: str,
+        param_name: Optional[str] = None,
+        save_cache: bool = True,
     ) -> Dict[str, Any]:
         """
         Faz requisição à API para buscar todos os parâmetros de um app.
@@ -556,8 +561,9 @@ class ParamManager:
         self._cache[app_name] = params
         self._cache_timestamp[app_name] = time.time()
 
-        # Salva dados localmente
-        self._save_to_local_db(app_name, params)
+        if save_cache:
+            # Salva dados localmente
+            self._save_to_local_db(app_name, params)
 
         # Limpa o timestamp de erro da API se a requisição foi bem-sucedida
         if app_name in self._api_error_timestamp:
@@ -565,7 +571,9 @@ class ParamManager:
 
         return params
 
-    def _fetch_param_from_api(self, app_name: str, param_name: str) -> Any:
+    def _fetch_param_from_api(
+        self, app_name: str, param_name: str, save_cache: bool = True
+    ) -> Any:
         """
         Faz requisição à API para buscar um parâmetro específico.
 
@@ -614,8 +622,9 @@ class ParamManager:
         else:
             self._cache[app_name] = {param_name: param_value}
 
-        # Salva dados localmente
-        self._save_to_local_db(app_name, self._cache[app_name])
+        if save_cache:
+            # Salva dados localmente
+            self._save_to_local_db(app_name, self._cache[app_name])
 
         # Limpa o timestamp de erro da API se a requisição foi bem-sucedida
         if app_name in self._api_error_timestamp:
