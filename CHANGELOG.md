@@ -1,3 +1,17 @@
+Versão 0.3.7 (2025-12-31)
+
+### :bug: CORREÇÕES
+
+- Ajuste _fetch_from_api para limpar db local caso necessário.
+
+
+Versão 0.3.6 (2025-12-31)
+
+### :bug: CORREÇÕES
+
+- Inclua ajuste para caso corrompido db local ele faça a limpeza e nova chamada para api de parâmetros em _get_from_local_db.
+
+
 Versão 0.3.3 (2025-12-17)
 
 ### :bug: CORREÇÕES

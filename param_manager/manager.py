@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import sys
@@ -526,48 +527,39 @@ class ParamManager:
         param_name: Optional[str] = None,
         save_cache: bool = True,
     ) -> Dict[str, Any]:
-        """
-        Faz requisição à API para buscar todos os parâmetros de um app.
-
-        Args:
-            app_name: Nome do aplicativo.
-            param_name: Nome do parâmetro específico
-            (opcional, mantido para compatibilidade).
-
-        Returns:
-            Dicionário com os parâmetros.
-
-        Raises:
-            Exception: Se ocorrer erro na requisição.
-        """
-        # Constrói URL apropriada para todos os parâmetros
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
-
         logger.info(f'Buscando todos os parâmetros da API: {url}')
 
-        # Faz requisição HTTP
         response = requests.get(url, timeout=self._timeout, verify=False)
 
-        # Verifica se a requisição foi bem-sucedida
         if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
 
-        # Processa resposta
-        data = response.json()
+        try:
+            data = response.json()
+        except json.JSONDecodeError as e:
+            logger.error(
+                f'Erro de JSON na resposta da API para {app_name}: {e}'
+            )
+            # limpa DB local
+            try:
+                self._db.purge_tables()
+                logger.warning(
+                    'DB local foi limpo após erro de parsing da API.'
+                )
+            except Exception as purge_err:
+                logger.error(f'Falha ao limpar DB local: {purge_err}')
+            # retorna vazio para não travar
+            return {}
 
-        # Extrai parâmetros da resposta
         params = data.get('params', {})
 
+        self._cache[app_name] = params
+        self._cache_timestamp[app_name] = time.time()
+
         if save_cache:
-
-            # Atualiza cache e timestamp
-            self._cache[app_name] = params
-            self._cache_timestamp[app_name] = time.time()
-
-            # Salva dados localmente
             self._save_to_local_db(app_name, params)
 
-        # Limpa o timestamp de erro da API se a requisição foi bem-sucedida
         if app_name in self._api_error_timestamp:
             del self._api_error_timestamp[app_name]
 
@@ -732,42 +724,44 @@ class ParamManager:
         self, app_name: str, param_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Recupera dados do banco local.
-
-        Args:
-            app_name: Nome do aplicativo.
-            param_name: Nome do parâmetro específico (opcional).
-
-        Returns:
-            Dicionário com os parâmetros ou vazio se não encontrado.
+        Recupera dados do banco local. Se ocorrer erro de leitura,
+        limpa o DB e tenta nova requisição à API.
         """
         logger.info(f'Buscando parâmetros localmente para o app: {app_name}')
+        try:
+            table = self._db.table(app_name)
+            records = table.all()
+            if not records:
+                logger.warning(
+                    f'Nenhum registro local encontrado para o app: {app_name}'
+                )
+                return {}
 
-        # Define a tabela para o app
-        table = self._db.table(app_name)
+            records.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+            params = records[0].get('params', {})
 
-        # Busca o registro mais recente
-        records = table.all()
+            if param_name:
+                return (
+                    {param_name: params[param_name]}
+                    if param_name in params
+                    else {}
+                )
+            return params
 
-        if not records:
-            logger.warning(
-                f'Nenhum registro local encontrado para o app: {app_name}'
-            )
-            return {}
-
-        # Ordena por timestamp (mais recente primeiro)
-        records.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-
-        # Obtém os parâmetros do registro mais recente
-        params = records[0].get('params', {})
-
-        # Filtra por param_name se especificado
-        if param_name:
-            if param_name in params:
-                return {param_name: params[param_name]}
-            return {}
-
-        return params
+        except Exception as e:
+            logger.error(f'Erro ao ler DB local para {app_name}: {e}')
+            # Limpa completamente o banco local
+            try:
+                self._db.purge_tables()
+                logger.warning('DB local corrompido foi limpo.')
+            except Exception as purge_err:
+                logger.error(f'Falha ao limpar DB local: {purge_err}')
+            # Tenta nova requisição à API
+            try:
+                return self._fetch_from_api(app_name, param_name)
+            except Exception as api_err:
+                logger.error(f'Nova requisição à API também falhou: {api_err}')
+                return {}
 
     def _handle_api_error(
         self, app_name: str, param_name: Optional[str], error: Exception

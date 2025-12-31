@@ -1,6 +1,6 @@
 [project]
 name = "param-manager"
-version = "0.3.5"
+version = "0.3.7"
 description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
