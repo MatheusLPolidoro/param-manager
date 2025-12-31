@@ -1,3 +1,10 @@
+Versão 0.3.3 (2025-12-17)
+
+### :bug: CORREÇÕES
+
+- Corrija utilização de parâmetro save\_cache em \_fetch\_param\_from\_api.
+
+
 Versão 0.3.1 (2025-12-16)
 
 ### :bug: CORREÇÕES

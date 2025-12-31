@@ -54,18 +54,6 @@ class ParamManager:
         username: str | None = None,
         password: str | None = None,
     ):
-        self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
-        self._timeout = int(os.getenv('TIMEOUT', timeout))
-        self._token = None
-        self._refresh_token = None
-        self._token_expire_at = 0
-        self._username = os.getenv('PARAMS_USERNAME', username)
-        self._password = os.getenv('PARAMS_PASSWORD', password)
-
-        # Evita reinicialização
-        if hasattr(self, '_initialized') and self._initialized:
-            return
-
         # Procura e carrega .env do diretório correto
         # Detecta se está rodando como executável PyInstaller
         if getattr(sys, 'frozen', False):
@@ -79,13 +67,24 @@ class ParamManager:
 
         load_dotenv(dotenv_path=dotenv_path)
 
+        self._cache_duration = int(os.getenv('CACHE_DURATION', cache_duration))
+        self._username = os.getenv('PARAMS_USERNAME', username)
+        self._password = os.getenv('PARAMS_PASSWORD', password)
+
+        # Evita reinicialização
+        if hasattr(self, '_initialized') and self._initialized:
+            return
+
+        self._lock = threading.Lock()
+        self._token = None
+        self._refresh_token = None
+        self._token_expire_at = 0
+        self._timeout = int(os.getenv('TIMEOUT', timeout))
         self._api_base_url = (
             api_url
             or os.getenv('API_PARAMS_URL', '')
             or os.getenv('API_URL', '')
         )
-        self._lock = threading.RLock()
-
         env_db_path = os.getenv('LOCAL_DB_PATH')
         if local_db_path and os.path.exists(local_db_path):
             current_dir = local_db_path
@@ -493,7 +492,9 @@ class ParamManager:
 
         # Tenta buscar da API
         try:
-            param_value = self._fetch_param_from_api(app_name, param_name)
+            param_value = self._fetch_param_from_api(
+                app_name, param_name, save_cache
+            )
             if not isinstance(param_value, dict):
                 param_value = dict()
             return ParamManager._extract_value(param_value)
@@ -557,11 +558,12 @@ class ParamManager:
         # Extrai parâmetros da resposta
         params = data.get('params', {})
 
-        # Atualiza cache e timestamp
-        self._cache[app_name] = params
-        self._cache_timestamp[app_name] = time.time()
-
         if save_cache:
+
+            # Atualiza cache e timestamp
+            self._cache[app_name] = params
+            self._cache_timestamp[app_name] = time.time()
+
             # Salva dados localmente
             self._save_to_local_db(app_name, params)
 
@@ -608,21 +610,21 @@ class ParamManager:
         # Extrai parâmetro da resposta
         param_value = data.get('param')
 
-        # Chave para o cache específico do parâmetro
-        param_cache_key = f'{app_name}:{param_name}'
-
-        # Atualiza o cache específico do parâmetro
-        self._param_cache[param_cache_key] = param_value
-        self._param_cache_timestamp[param_cache_key] = time.time()
-
-        # Também atualiza o cache global se existir
-        if app_name in self._cache:
-            self._cache[app_name][param_name] = param_value
-            self._cache_timestamp[app_name] = time.time()
-        else:
-            self._cache[app_name] = {param_name: param_value}
-
         if save_cache:
+            # Chave para o cache específico do parâmetro
+            param_cache_key = f'{app_name}:{param_name}'
+
+            # Atualiza o cache específico do parâmetro
+            self._param_cache[param_cache_key] = param_value
+            self._param_cache_timestamp[param_cache_key] = time.time()
+
+            # Também atualiza o cache global se existir
+            if app_name in self._cache:
+                self._cache[app_name][param_name] = param_value
+                self._cache_timestamp[app_name] = time.time()
+            else:
+                self._cache[app_name] = {param_name: param_value}
+
             # Salva dados localmente
             self._save_to_local_db(app_name, self._cache[app_name])
 

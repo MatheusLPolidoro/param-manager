@@ -701,7 +701,7 @@ def test_get_param_from_specific_cache(setup_param_manager):
     param_manager._param_cache_timestamp["test_app:PARAM1"] = time.time()
 
     # Força cache válido
-    param_manager._is_param_cache_valid = lambda app, param: True
+    param_manager._is_param_cache_valid = lambda app, param, save_cache=True: True
 
     result = param_manager.get_param("test_app", "PARAM1")
     assert result == "cached_value"
@@ -722,7 +722,7 @@ def test_get_param_api_error_cached(setup_param_manager):
     """Testa retorno de dados locais quando há erro de API anterior."""
     param_manager, *_ = setup_param_manager
     param_manager._is_api_error_cached = lambda app: True
-    param_manager._get_from_local_db = lambda app, param: {"PARAM1": {"value": "local_value"}}
+    param_manager._get_from_local_db = lambda app, param, save_cache=True: {"PARAM1": {"value": "local_value"}}
 
     result = param_manager.get_param("test_app", "PARAM1")
     assert result == "local_value"
@@ -731,10 +731,10 @@ def test_get_param_api_error_cached(setup_param_manager):
 def test_get_param_fetch_from_api_success(setup_param_manager):
     """Testa busca de parâmetro diretamente da API."""
     param_manager, *_ = setup_param_manager
-    param_manager._is_param_cache_valid = lambda app, param: False
+    param_manager._is_param_cache_valid = lambda app, param, save_cache=True: False
     param_manager._is_cache_valid = lambda app: False
     param_manager._is_api_error_cached = lambda app: False
-    param_manager._fetch_param_from_api = lambda app, param: {"value": "api_value"}
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: {"value": "api_value"}
 
     result = param_manager.get_param("test_app", "PARAM1")
     assert result == "api_value"
@@ -743,7 +743,7 @@ def test_get_param_fetch_from_api_success(setup_param_manager):
 def test_get_param_fetch_from_api_timeout(setup_param_manager):
     """Testa fallback quando ocorre Timeout na API."""
     param_manager, *_ = setup_param_manager
-    param_manager._fetch_param_from_api = lambda app, param: (_ for _ in ()).throw(Timeout("timeout"))
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: (_ for _ in ()).throw(Timeout("timeout"))
     param_manager._handle_api_error = lambda app, param, e: {"PARAM1": {"value": "fallback_value"}}
 
     result = param_manager.get_param("test_app", "PARAM1")
@@ -754,7 +754,7 @@ def test_get_param_fetch_from_api_timeout(setup_param_manager):
 def test_get_param_fetch_from_api_connection_error(setup_param_manager):
     """Testa fallback quando ocorre ConnectionError na API."""
     param_manager, *_ = setup_param_manager
-    param_manager._fetch_param_from_api = lambda app, param: (_ for _ in ()).throw(ConnectionError("conn error"))
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: (_ for _ in ()).throw(ConnectionError("conn error"))
     param_manager._handle_api_error = lambda app, param, e: {"PARAM1": {"value": "fallback_value"}}
 
     result = param_manager.get_param("test_app", "PARAM1")
@@ -765,7 +765,7 @@ def test_get_param_fetch_from_api_connection_error(setup_param_manager):
 def test_get_param_fetch_from_api_unexpected_error(setup_param_manager):
     """Testa fallback quando ocorre erro inesperado na API."""
     param_manager, *_ = setup_param_manager
-    param_manager._fetch_param_from_api = lambda app, param: (_ for _ in ()).throw(RuntimeError("unexpected"))
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: (_ for _ in ()).throw(RuntimeError("unexpected"))
     param_manager._handle_api_error = lambda app, param, e: {"PARAM1": {"value": "fallback_value"}}
 
     result = param_manager.get_param("test_app", "PARAM1")
@@ -789,7 +789,7 @@ def test_get_param_password_decryption_success(setup_param_manager, monkeypatch)
     cipher_pw = AES.new(chave_mestra, AES.MODE_GCM)
     pw_data, pw_tag = cipher_pw.encrypt_and_digest(senha_original)
 
-    param_manager._fetch_param_from_api = lambda app, param: {
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: {
         "value": {
             "salt": salt.hex(),
             "master_key": {
@@ -815,7 +815,7 @@ def test_get_param_password_decryption_missing_fields(setup_param_manager, monke
     param_manager, *_ = setup_param_manager
     monkeypatch.setenv("CHAVE_CUSTODIA_APP", "segredo_teste")
 
-    param_manager._fetch_param_from_api = lambda app, param: {
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: {
         "value": {"salt": "00"}  # faltam master_key e crypto_data
     }
 
@@ -828,7 +828,7 @@ def test_get_param_password_decryption_missing_env(setup_param_manager, monkeypa
     param_manager, *_ = setup_param_manager
     monkeypatch.delenv("CHAVE_CUSTODIA_APP", raising=False)
 
-    param_manager._fetch_param_from_api = lambda app, param: {
+    param_manager._fetch_param_from_api = lambda app, param, save_cache=True: {
         "value": {
             "salt": "00",
             "master_key": {"iv": "00", "tag": "00", "data": "00"},
