@@ -1,3 +1,10 @@
+Versão 0.3.8 (2026-01-02)
+
+### :bug: CORREÇÕES
+
+- Inclua validação de banco truncado e correção de limpeza.
+
+
 Versão 0.3.7 (2025-12-31)
 
 ### :bug: CORREÇÕES

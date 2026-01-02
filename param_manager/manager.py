@@ -723,10 +723,6 @@ class ParamManager:
     def _get_from_local_db(
         self, app_name: str, param_name: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Recupera dados do banco local. Se ocorrer erro de leitura,
-        limpa o DB e tenta nova requisição à API.
-        """
         logger.info(f'Buscando parâmetros localmente para o app: {app_name}')
         try:
             table = self._db.table(app_name)
@@ -736,10 +732,8 @@ class ParamManager:
                     f'Nenhum registro local encontrado para o app: {app_name}'
                 )
                 return {}
-
             records.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
             params = records[0].get('params', {})
-
             if param_name:
                 return (
                     {param_name: params[param_name]}
@@ -747,21 +741,16 @@ class ParamManager:
                     else {}
                 )
             return params
-
         except Exception as e:
             logger.error(f'Erro ao ler DB local para {app_name}: {e}')
-            # Limpa completamente o banco local
+            # Limpa todas as tabelas do DB
             try:
-                self._db.purge_tables()
-                logger.warning('DB local corrompido foi limpo.')
+                self._db.drop_tables()
+                logger.warning('DB local foi limpo após erro de leitura.')
             except Exception as purge_err:
                 logger.error(f'Falha ao limpar DB local: {purge_err}')
-            # Tenta nova requisição à API
-            try:
-                return self._fetch_from_api(app_name, param_name)
-            except Exception as api_err:
-                logger.error(f'Nova requisição à API também falhou: {api_err}')
-                return {}
+            # Retorna vazio para não travar
+            return {}
 
     def _handle_api_error(
         self, app_name: str, param_name: Optional[str], error: Exception
