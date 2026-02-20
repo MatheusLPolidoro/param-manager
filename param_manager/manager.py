@@ -334,13 +334,14 @@ class ParamManager:
             raw: list[dict] = params['value']
             if isinstance(raw, list):
                 for item in raw:
-                    item['password'] = ParamManager._descriptografar_param(
-                        item['password']
-                    )
+                    if isinstance(item.get('password'), dict):
+                        item['password'] = ParamManager._descriptografar_param(
+                            item['password']
+                        )
         elif params.get('type') == 'user':
             raw: dict = params['value']
             if isinstance(raw, dict):
-                if 'password' in raw.keys():
+                if isinstance(raw.get('password'), dict):
                     raw['password'] = ParamManager._descriptografar_param(
                         raw['password']
                     )
