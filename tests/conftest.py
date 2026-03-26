@@ -14,7 +14,7 @@ def setup_param_manager(requests_mock, monkeypatch):
     - Injeta mocks de requisição
     """
     # Reset do Singleton
-    ParamManager._ParamManager__instance = None
+    ParamManager._instances = {}
 
     # Diretório temporário para DB
     test_db_dir = os.path.join(os.path.expanduser('~'), 'param_manager_test')

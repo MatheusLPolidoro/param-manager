@@ -1,3 +1,17 @@
+Versão 0.4.0 (2026-03-26)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- Aprimore a gestão de variáveis de ambiente: Implemente prioridade para variáveis de ambiente prefixadas com o nome da instância (ex: PLUGIN_API_URL), permitindo configurações granulares sem afetar o escopo global.
+- Garanta a segurança entre threads (Thread-Safety): Implemente um lock de classe no método __new__ para evitar condições de corrida na criação de instâncias nomeadas.
+- Isole o armazenamento do TinyDB: Configure cada instância para utilizar seu próprio arquivo JSON (ex: params_default.json) em subdiretórios distintos, eliminando conflitos de escrita e travas de arquivo.
+- Otimize a recuperação de falhas: Refine os mecanismos de cooldown e fallback local para que falhas de conexão em uma instância não bloqueiem as requisições das demais.
+- Persista o contexto no objeto: Armazene o instance_name dentro de cada instância para que logs, erros e metadados reflitam exatamente qual gerenciador está operando.
+- Personalize o Logging por instância: Atualize todas as mensagens de logger para incluir o nome da instância ativa, facilitando o rastreamento em ambientes complexos.
+- Preserve a compatibilidade do Singleton: Mantenha o funcionamento padrão para chamadas sem argumentos, direcionando-as automaticamente para a instância "default".
+- Refatore a estrutura de instâncias para o padrão Multiton: Substitua o atributo único __instance por um dicionário _instances para permitir múltiplos gerenciadores (ex: "default", "plugin_x") no mesmo processo.
+- Refatore a limpeza de cache: Ajuste o método clear_cache para que a purga de dados seja restrita à instância atual, sem interferir no cache de outros gerenciadores.
+
 Versão 0.3.8 (2026-01-02)
 
 ### :bug: CORREÇÕES

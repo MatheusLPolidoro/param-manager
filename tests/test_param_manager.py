@@ -19,7 +19,7 @@ from param_manager.manager import ParamManager
 def test_avoids_reinitialization(monkeypatch, tmp_path):
     """Testa se o __init__ não roda novamente quando _initialized já está True."""
     # Resetar singleton
-    ParamManager._ParamManager__instance = None
+    ParamManager._instances = {}
 
     # Cria diretório temporário válido
     local_path = tmp_path / "local_db"
@@ -43,7 +43,7 @@ def test_avoids_reinitialization(monkeypatch, tmp_path):
 
 
 def test_detects_pyinstaller_base_dir(monkeypatch):
-    ParamManager._ParamManager__instance = None  # reset singleton
+    ParamManager._instances = {}  # reset singleton
 
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", "/tmp/pyinstaller_dir", raising=False)
@@ -56,7 +56,7 @@ def test_detects_pyinstaller_base_dir(monkeypatch):
 
 def test_init_prefers_env_db_path(monkeypatch, tmp_path):
     """Testa se usa env_db_path quando existe e não há local_db_path/base_dir."""
-    ParamManager._ParamManager__instance = None
+    ParamManager._instances = {}
 
     # Cria diretório temporário válido
     env_path = tmp_path / "env_db"
@@ -79,7 +79,7 @@ def test_init_prefers_env_db_path(monkeypatch, tmp_path):
 def test_init_prefers_env_db_path(monkeypatch, tmp_path):
     """Testa se usa env_db_path quando existe e não há local_db_path/base_dir."""
     # Resetar singleton
-    ParamManager._ParamManager__instance = None
+    ParamManager._instances = {}
 
     # Cria diretório temporário válido
     env_path = tmp_path / "env_db"
@@ -100,7 +100,7 @@ def test_init_prefers_env_db_path(monkeypatch, tmp_path):
 
 
 def test_init_uses_cache_if_valid(monkeypatch, tmp_path):
-    ParamManager._ParamManager__instance = None
+    ParamManager._instances = {}
 
     cache_path = tmp_path / "cache_db"
     cache_path.mkdir()
@@ -119,7 +119,7 @@ def test_init_uses_cache_if_valid(monkeypatch, tmp_path):
 
 def test_uses_cache_if_valid(monkeypatch, caplog, tmp_path):
     """Testa se usa o cache quando válido."""
-    ParamManager._ParamManager__instance = None
+    ParamManager._instances = {}
 
     pm = ParamManager(api_url="http://test-api.example.com", local_db_path=str(tmp_path))        
 
@@ -1122,7 +1122,7 @@ def test_clear_cache_all_clears_everything(setup_param_manager, caplog):
     assert param_manager._api_error_timestamp == {}
 
     # Verifica se log foi emitido
-    assert any("Cache limpo para todos os apps e parâmetros" in msg for msg in caplog.messages)
+    assert any("Cache limpo" in msg for msg in caplog.messages)
 
 
 def test_cache_info_with_valid_cache(setup_param_manager):
