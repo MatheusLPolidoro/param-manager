@@ -1,3 +1,10 @@
+Versão 0.4.1 (2026-03-26)
+
+### :bug: CORREÇÕES
+
+- Remova propagação de cache em chamada de parâmetro especifico para todos os parâmetros da aplicação.
+
+
 Versão 0.4.0 (2026-03-26)
 
 ### :zap: NOVAS FUNCIONALIDADES

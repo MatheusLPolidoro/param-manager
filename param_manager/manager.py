@@ -551,7 +551,6 @@ class ParamManager:
     def _fetch_from_api(
         self,
         app_name: str,
-        param_name: Optional[str] = None,
         save_cache: bool = True,
     ) -> Dict[str, Any]:
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
@@ -609,7 +608,6 @@ class ParamManager:
             self._param_cache_timestamp[param_cache_key] = time.time()
             if app_name in self._cache:
                 self._cache[app_name][param_name] = param_value
-                self._cache_timestamp[app_name] = time.time()
             else:
                 self._cache[app_name] = {param_name: param_value}
             self._save_to_local_db(app_name, self._cache[app_name])
