@@ -1,3 +1,14 @@
+Versão 0.4.2 (2026-07-29)
+
+### :bug: CORREÇÕES
+
+- Adicione mais uma tentativa em upsert\_params apos renovar o token.
+
+### :classical_building: INFRAESTRUTURA
+
+- Altere a versão do python-dotenv para atual que não tem alerta no pip-audit.
+
+
 Versão 0.4.1 (2026-03-26)
 
 ### :bug: CORREÇÕES
