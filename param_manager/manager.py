@@ -314,15 +314,26 @@ class ParamManager:
         })
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
 
-        res = requests.put(
-            url,
-            json=payload,
-            headers=self._auth_headers(),
-            timeout=self._timeout,
-        )
+        def _do_request():
+            return requests.put(
+                url,
+                json=payload,
+                headers=self._auth_headers(),
+                timeout=self._timeout,
+            )
+
+        res = _do_request()
+
+        # Se não autorizado, tenta renovar token e repetir
+        if res.status_code == HTTPStatus.UNAUTHORIZED:
+            # força refresh do token
+            self._auth_refresh_token()
+            time.sleep(2)
+            res = _do_request()
 
         if res.status_code != HTTPStatus.OK:
             raise Exception(f'Erro ao fazer upsert de parâmetros: {res.text}')
+
         self._cache[app_name] = res.json().get('params', {})
         self._cache_timestamp[app_name] = time.time()
         self._save_to_local_db(app_name, self._cache[app_name])
