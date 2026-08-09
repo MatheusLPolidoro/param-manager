@@ -9,7 +9,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 from http import HTTPStatus
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional, Tuple
 
 import requests
 from Crypto.Cipher import AES
@@ -141,6 +141,10 @@ class ParamManager:
             # Lock dedicado ao token: reaproveitar self._lock causaria
             # reentrância com _save_to_local_db.
             self._token_lock = threading.Lock()
+            # Lock para os dicts de cache e breaker (CL-2): protege
+            # _cache, _cache_timestamp, _param_cache,
+            # _param_cache_timestamp, _api_error_timestamp.
+            self._state_lock = threading.Lock()
             self._token = None
             self._refresh_token = None
             self._token_expire_at = 0
@@ -318,12 +322,86 @@ class ParamManager:
                 )
                 return negativo_vira
             logger.warning(
-                f'[ParamManager] {nome} {motivo_fallback}; '
-                f'usando fallback.'
+                f'[ParamManager] {nome} {motivo_fallback}; usando fallback.'
             )
             return fallback
 
         return valor
+
+    def _snapshot_cache(self, app: str) -> Dict[str, Any]:
+        """
+        Retorna cópia rasa do cache de um app (CAS/R1).
+
+        Copiar o container nunca as folhas: o dict retornado é novo,
+        mas contém as mesmas referências de objeto que estavam em
+        self._cache[app]. Iterações sobre o snapshot não estouram com
+        RuntimeError mesmo se a thread concorrente modificar o original.
+        O aliasing das folhas em _process_parameters (tipos não
+        sensíveis) é comportamento observável e documentado — preservado.
+        """
+        with self._state_lock:
+            return dict(self._cache.get(app, {}))
+
+    def _publicar_cache(
+        self, app: str, params: Dict[str, Any], iniciado_em: float
+    ) -> None:
+        """
+        Atualiza cache apenas se não foi escrito mais recentemente (CAS).
+
+        Impede que uma resposta atrasada sobrescreva cache mais novo.
+        """
+        with self._state_lock:
+            if self._cache_timestamp.get(app, 0) <= iniciado_em:
+                self._cache[app] = params
+                self._cache_timestamp[app] = iniciado_em
+
+    def _armar_breaker(self, app_name: str) -> None:
+        """Arma o circuit breaker para um app."""
+        with self._state_lock:
+            self._api_error_timestamp[app_name] = time.time()
+
+    def _desarmar_breaker(self, app: str, iniciado_em: float) -> None:
+        """
+        Desarma o breaker apenas se foi armado antes desta requisição (CAS).
+
+        Impede que uma resposta atrasada (de antes do erro) destrua o
+        registro do erro e abra o circuito prematuramente.
+
+        O empate desarma, de propósito. `time.time()` tem resolução de
+        ~15 ms no Windows, então um erro e uma requisição iniciada no
+        mesmo tique recebem o mesmo timestamp. Os dois lados do empate
+        custam coisas muito diferentes: desarmar cedo demais gasta uma
+        requisição a mais, que no pior caso rearma o breaker; deixar de
+        desarmar prende o cliente no fallback local pelo cooldown
+        inteiro — 3600s com os defaults de `get_instance`. Por isso a
+        comparação é `<=` e não `<`.
+        """
+        with self._state_lock:
+            if self._api_error_timestamp.get(app, 0) <= iniciado_em:
+                self._api_error_timestamp.pop(app, None)
+
+    def _breaker_ativo(self, app: str) -> bool:
+        """Diz se o circuit breaker está ativo para este app."""
+        with self._state_lock:
+            if app not in self._api_error_timestamp:
+                return False
+            current_time = time.time()
+            error_time = self._api_error_timestamp[app]
+            return (current_time - error_time) < self._effective_cooldown
+
+    def _snapshot_info(self) -> Tuple[Dict, Dict, Dict]:
+        """
+        Cópia dos três dicts de timestamp (CAS/R1).
+
+        Para get_cache_info iterar fora do lock sem estouro de
+        RuntimeError.
+        """
+        with self._state_lock:
+            return (
+                dict(self._cache_timestamp),
+                dict(self._param_cache_timestamp),
+                dict(self._api_error_timestamp),
+            )
 
     def _purge_plaintext_cache(self) -> None:
         """
@@ -457,27 +535,36 @@ class ParamManager:
         """
         Limpa apenas o cache desta instância.
         """
-        if app_name and param_name:
-            key = f'{app_name}:{param_name}'
-            self._param_cache.pop(key, None)
-            self._param_cache_timestamp.pop(key, None)
-        elif app_name:
-            self._cache.pop(app_name, None)
-            self._cache_timestamp.pop(app_name, None)
-            self._api_error_timestamp.pop(app_name, None)
-            # Limpa chaves específicas que começam com o app
-            keys_to_del = [
-                k for k in self._param_cache if k.startswith(f'{app_name}:')
-            ]
-            for k in keys_to_del:
-                self._param_cache.pop(k, None)
-                self._param_cache_timestamp.pop(k, None)
-        else:
-            self._cache.clear()
-            self._cache_timestamp.clear()
-            self._param_cache.clear()
-            self._param_cache_timestamp.clear()
-            self._api_error_timestamp.clear()
+        with self._state_lock:
+            if app_name and param_name:
+                key = f'{app_name}:{param_name}'
+                self._param_cache.pop(key, None)
+                self._param_cache_timestamp.pop(key, None)
+            elif app_name:
+                self._cache.pop(app_name, None)
+                self._cache_timestamp.pop(app_name, None)
+                # IMPORTANTE: clear_cache é ação explícita do operador
+                # e desarma o breaker incondicionalmente. O desarme por
+                # sucesso de requisição é CAS-guardado em _desarmar_breaker
+                # — duas semânticas diferentes sobre o mesmo dict. Sem este
+                # comentário, o próximo leitor "uniformiza" e reintroduz a
+                # race do desarme precoce (R5).
+                self._api_error_timestamp.pop(app_name, None)
+                # Limpa chaves específicas que começam com o app
+                keys_to_del = [
+                    k
+                    for k in self._param_cache
+                    if k.startswith(f'{app_name}:')
+                ]
+                for k in keys_to_del:
+                    self._param_cache.pop(k, None)
+                    self._param_cache_timestamp.pop(k, None)
+            else:
+                self._cache.clear()
+                self._cache_timestamp.clear()
+                self._param_cache.clear()
+                self._param_cache_timestamp.clear()
+                self._api_error_timestamp.clear()
 
         logger.info(f'[ParamManager: {self._instance_name}] Cache limpo.')
 
@@ -657,11 +744,17 @@ class ParamManager:
         if res.status_code != HTTPStatus.OK:
             raise Exception(f'Erro ao fazer upsert de parâmetros: {res.text}')
 
-        self._cache[app_name] = res.json().get('params', {})
-        self._cache_timestamp[app_name] = time.time()
+        params = res.json().get('params', {})
+        # Aqui o timestamp é o de AGORA, não o do início da requisição:
+        # este processo acabou de escrever o valor, então a publicação é
+        # autoritativa e precisa vencer o CAS. Trocar por um instante
+        # anterior à chamada faria um GET concorrente mais novo derrubar
+        # a escrita que o próprio chamador acabou de fazer.
+        self._publicar_cache(app_name, params, time.time())
         # Invalida cache por parâmetro; ver delete_param para a ordem.
         self.clear_cache(app_name, param_name)
-        self._save_to_local_db(app_name, self._cache[app_name])
+        # Passa snapshot do cache para evitar iteração em estrutura viva.
+        self._save_to_local_db(app_name, self._snapshot_cache(app_name))
 
         return res.json()
 
@@ -678,16 +771,25 @@ class ParamManager:
         if res.status_code != HTTPStatus.OK:
             raise Exception(f'Erro ao deletar parâmetro: {res.text}')
 
-        # Remove do cache local
-        if app_name in self._cache:
-            self._cache[app_name].pop(param_name, None)
+        # Remove do cache local substituindo por dict novo (R2).
+        # Não mutar in-place: o dict retornado por referência ao
+        # chamador seria afetado.
+        with self._state_lock:
+            if app_name in self._cache:
+                self._cache[app_name] = {
+                    k: v
+                    for k, v in self._cache[app_name].items()
+                    if k != param_name
+                }
 
         # Invalida cache por parâmetro. Deve vir ANTES de
         # _remove_from_local_db para evitar que um get_param concorrente
         # repopule _param_cache a partir de um _cache ainda sujo.
-        # Chamar clear_cache de dentro de _remove_from_local_db seria
-        # deadlock: aquele método segura self._lock, que é threading.Lock
-        # (não RLock), enquanto clear_cache não adquire lock.
+        # E precisa continuar FORA de _remove_from_local_db: aquele
+        # método segura self._lock e clear_cache passou a adquirir
+        # self._state_lock (CL-2), então chamá-lo de lá criaria a aresta
+        # _lock -> _state_lock e fecharia o ciclo ABBA com a aresta
+        # oposta. Ambos são threading.Lock, não RLock, de propósito.
         self.clear_cache(app_name, param_name)
 
         # Remoção explícita: o merge de _save_to_local_db ressuscitaria
@@ -858,8 +960,11 @@ class ParamManager:
         logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
         if self._is_cache_valid(app_name):
             logger.info(f'Usando cache para o app: {app_name}')
-            return ParamManager._process_parameters(self._cache[app_name])
-        if self._is_api_error_cached(app_name):
+            # Snapshot para processar fora do lock (R1).
+            return ParamManager._process_parameters(
+                self._snapshot_cache(app_name)
+            )
+        if self._breaker_ativo(app_name):
             logger.warning(
                 f'API para {app_name} está em cooldown.'
                 f'Usando dados locais ou cache.'
@@ -873,8 +978,7 @@ class ParamManager:
             return ParamManager._process_parameters(params)
         except ParamNaoEncontradoError as e:
             logger.warning(
-                f'Parâmetros não encontrados (404) para {app_name}: '
-                f'{str(e)}'
+                f'Parâmetros não encontrados (404) para {app_name}: {str(e)}'
             )
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
@@ -915,13 +1019,16 @@ class ParamManager:
             logger.info(
                 f'Usando cache global do app para o parâmetro: {param_name}'
             )
-            params = self._cache[app_name]
+            # Snapshot para evitar race ao ler e depois atualizar cache
+            # (R1).
+            params = self._snapshot_cache(app_name)
             param_value = params.get(param_name)
             if param_value is not None:
-                self._param_cache[param_cache_key] = param_value
-                self._param_cache_timestamp[param_cache_key] = time.time()
+                with self._state_lock:
+                    self._param_cache[param_cache_key] = param_value
+                    self._param_cache_timestamp[param_cache_key] = time.time()
                 return ParamManager._extract_value(param_value)
-        if self._is_api_error_cached(app_name):
+        if self._breaker_ativo(app_name):
             logger.warning(
                 f'API para {app_name} está em cooldown. Usando dados locais.'
             )
@@ -982,6 +1089,7 @@ class ParamManager:
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
         logger.info(f'Buscando todos os parâmetros da API: {url}')
 
+        iniciado_em = time.time()
         response = requests.get(
             url,
             timeout=self._timeout,
@@ -1014,14 +1122,15 @@ class ParamManager:
 
         params = data.get('params', {})
 
-        self._cache[app_name] = params
-        self._cache_timestamp[app_name] = time.time()
+        # CAS: não sobrescreve cache mais novo (R5).
+        self._publicar_cache(app_name, params, iniciado_em)
 
         if save_cache:
-            self._save_to_local_db(app_name, params)
+            # Passa snapshot para evitar iteração em estrutura viva (R1).
+            self._save_to_local_db(app_name, self._snapshot_cache(app_name))
 
-        if app_name in self._api_error_timestamp:
-            del self._api_error_timestamp[app_name]
+        # CAS: só desarma se o breaker foi armado antes desta requisição.
+        self._desarmar_breaker(app_name, iniciado_em)
 
         return params
 
@@ -1033,6 +1142,7 @@ class ParamManager:
             f'{app_name}/params/{param_name}'
         )
         logger.info(f'Buscando parâmetro específico da API: {url}')
+        iniciado_em = time.time()
         response = requests.get(
             url,
             timeout=self._timeout,
@@ -1049,40 +1159,48 @@ class ParamManager:
         param_value = data.get('param')
         if save_cache:
             param_cache_key = f'{app_name}:{param_name}'
-            self._param_cache[param_cache_key] = param_value
-            self._param_cache_timestamp[param_cache_key] = time.time()
-            if app_name in self._cache:
-                self._cache[app_name][param_name] = param_value
-            else:
-                self._cache[app_name] = {param_name: param_value}
-            self._save_to_local_db(app_name, self._cache[app_name])
-        if app_name in self._api_error_timestamp:
-            del self._api_error_timestamp[app_name]
+            with self._state_lock:
+                self._param_cache[param_cache_key] = param_value
+                self._param_cache_timestamp[param_cache_key] = time.time()
+                if app_name in self._cache:
+                    # Não mutar in-place: substituir por dict novo (R2).
+                    self._cache[app_name] = {
+                        **self._cache[app_name],
+                        param_name: param_value,
+                    }
+                else:
+                    self._cache[app_name] = {param_name: param_value}
+            # Passa snapshot para evitar iteração em estrutura viva (R1).
+            self._save_to_local_db(app_name, self._snapshot_cache(app_name))
+        # CAS: só desarma se o breaker foi armado antes desta requisição.
+        self._desarmar_breaker(app_name, iniciado_em)
 
         return param_value
 
     def _is_cache_valid(self, app_name: str) -> bool:
-        if (
-            app_name not in self._cache
-            or app_name not in self._cache_timestamp
-        ):
-            return False
-        current_time = time.time()
-        cache_time = self._cache_timestamp[app_name]
+        with self._state_lock:
+            if (
+                app_name not in self._cache
+                or app_name not in self._cache_timestamp
+            ):
+                return False
+            current_time = time.time()
+            cache_time = self._cache_timestamp[app_name]
 
-        return (current_time - cache_time) < self._cache_duration
+            return (current_time - cache_time) < self._cache_duration
 
     def _is_param_cache_valid(self, app_name: str, param_name: str) -> bool:
         param_cache_key = f'{app_name}:{param_name}'
-        if (
-            param_cache_key not in self._param_cache
-            or param_cache_key not in self._param_cache_timestamp
-        ):
-            return False
-        current_time = time.time()
-        cache_time = self._param_cache_timestamp[param_cache_key]
+        with self._state_lock:
+            if (
+                param_cache_key not in self._param_cache
+                or param_cache_key not in self._param_cache_timestamp
+            ):
+                return False
+            current_time = time.time()
+            cache_time = self._param_cache_timestamp[param_cache_key]
 
-        return (current_time - cache_time) < self._cache_duration
+            return (current_time - cache_time) < self._cache_duration
 
     @property
     def _effective_cooldown(self) -> int:
@@ -1090,18 +1208,6 @@ class ParamManager:
         if self._api_error_cooldown is not None:
             return self._api_error_cooldown
         return self._cache_duration
-
-    def _armar_breaker(self, app_name: str) -> None:
-        """Arma o circuit breaker para um app."""
-        self._api_error_timestamp[app_name] = time.time()
-
-    def _is_api_error_cached(self, app_name: str) -> bool:
-        if app_name not in self._api_error_timestamp:
-            return False
-
-        current_time = time.time()
-        error_time = self._api_error_timestamp[app_name]
-        return (current_time - error_time) < self._effective_cooldown
 
     def _get_from_local_db(
         self, app_name: str, param_name: Optional[str] = None
@@ -1148,8 +1254,15 @@ class ParamManager:
         return self._get_from_local_db(app_name, param_name)
 
     def get_cache_info(self) -> Dict[str, Any]:
+        # Snapshot dos timestamps para iterar fora do lock (R1).
+        cache_ts, param_cache_ts, error_ts = self._snapshot_info()
+
+        # Snapshot dos keys de cache para evitar RuntimeError (R1).
+        with self._state_lock:
+            cached_apps = list(self._cache.keys())
+
         info = {
-            'apps_cached': list(self._cache.keys()),
+            'apps_cached': cached_apps,
             'cache_timestamps': {},
             'cache_valid': {},
             'params_cached': [],
@@ -1158,7 +1271,7 @@ class ParamManager:
             'api_error_timestamps': {},
         }
 
-        for app_name, timestamp in self._cache_timestamp.items():
+        for app_name, timestamp in cache_ts.items():
             dt = datetime.fromtimestamp(timestamp)
             expires_at = dt + timedelta(seconds=self._cache_duration)
             is_valid = self._is_cache_valid(app_name)
@@ -1173,7 +1286,7 @@ class ParamManager:
                 else 0,
             }
             info['cache_valid'][app_name] = is_valid
-        for param_key, timestamp in self._param_cache_timestamp.items():
+        for param_key, timestamp in param_cache_ts.items():
             info['params_cached'].append(param_key)
 
             dt = datetime.fromtimestamp(timestamp)
@@ -1193,12 +1306,10 @@ class ParamManager:
                 else 0,
             }
             info['param_cache_valid'][param_key] = is_valid
-        for app_name, timestamp in self._api_error_timestamp.items():
+        for app_name, timestamp in error_ts.items():
             dt = datetime.fromtimestamp(timestamp)
-            cooldown_ends_at = dt + timedelta(
-                seconds=self._effective_cooldown
-            )
-            is_cooldown_active = self._is_api_error_cached(app_name)
+            cooldown_ends_at = dt + timedelta(seconds=self._effective_cooldown)
+            is_cooldown_active = self._breaker_ativo(app_name)
 
             info['api_error_timestamps'][app_name] = {
                 'error_at': dt.isoformat(),

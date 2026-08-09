@@ -240,7 +240,7 @@ def test_excecao_generica_arma_circuit_breaker(setup_param_manager):
 
     pm.get_all_params("finance")
     assert "finance" in pm._api_error_timestamp
-    assert pm._is_api_error_cached("finance")
+    assert pm._breaker_ativo("finance")
 
 
 def test_import_star_funciona():
@@ -798,7 +798,7 @@ def test_api_error_cooldown_zero_desativa_circuit_breaker(
     # Simular timestamp de erro (time.time() retorna sempre False porque
     # 0 segundos passaram, logo current_time - error_time é sempre >= 0)
     pm._api_error_timestamp['test_app'] = time.time()
-    assert pm._is_api_error_cached('test_app') is False
+    assert pm._breaker_ativo('test_app') is False
 
 
 @pytest.mark.parametrize('valor', ['', '  ', 'abc', '30s', '10.5'])
@@ -1065,3 +1065,169 @@ def test_404_nao_desarma_breaker_ja_armado(setup_param_manager):
 
     # O breaker deve CONTINUAR armado (404 não o limpa)
     assert 'finance' in pm._api_error_timestamp
+
+
+# --- CL-2: travamento de cache e breaker -------------------------------
+
+
+def test_get_cache_info_sobrevive_mutacao_durante_iteracao(
+    setup_param_manager,
+):
+    """
+    R1: get_cache_info percorre snapshots, não os dicts vivos.
+
+    Concorrência simulada de dentro da iteração: _is_cache_valid muta
+    _cache_timestamp na primeira chave, como faria um clear_cache de
+    outra thread. Sem o snapshot isso é RuntimeError: dictionary
+    changed size during iteration.
+    """
+    pm, *_ = setup_param_manager
+
+    agora = time.time()
+    for app in ('app_a', 'app_b', 'app_c'):
+        pm._cache[app] = {'P': {'type': 'int', 'value': 1}}
+        pm._cache_timestamp[app] = agora
+    pm._api_error_timestamp['app_a'] = agora
+
+    original = pm._is_cache_valid
+    ja_mutou = []
+
+    def muta_na_primeira_chave(app_name):
+        if not ja_mutou:
+            ja_mutou.append(app_name)
+            pm._cache_timestamp.pop('app_c', None)
+            pm._api_error_timestamp['app_z'] = agora
+        return original(app_name)
+
+    pm._is_cache_valid = muta_na_primeira_chave
+
+    info = pm.get_cache_info()
+
+    assert ja_mutou, 'a mutação concorrente não chegou a ser exercitada'
+    assert 'app_a' in info['cache_timestamps']
+
+
+def test_process_parameters_sobrevive_mutacao_do_cache(setup_param_manager):
+    """
+    R1: get_all_params decifra sobre um snapshot, não sobre o cache vivo.
+
+    O side_effect grava uma chave nova em _cache[app] no meio da
+    comprehension de _process_parameters. Sem o snapshot, estoura.
+    """
+    pm, *_ = setup_param_manager
+
+    pm._cache['finance'] = {
+        'A': {'type': 'int', 'value': 1},
+        'B': {'type': 'int', 'value': 2},
+    }
+    pm._cache_timestamp['finance'] = time.time()
+
+    original = ParamManager._process_parameter
+    ja_mutou = []
+
+    def muta_na_primeira_chave(param):
+        if not ja_mutou:
+            ja_mutou.append(param)
+            pm._cache['finance']['C'] = {'type': 'int', 'value': 3}
+        return original(param)
+
+    with patch.object(
+        ParamManager, '_process_parameter', side_effect=muta_na_primeira_chave
+    ):
+        resultado = pm.get_all_params('finance')
+
+    assert ja_mutou, 'a mutação concorrente não chegou a ser exercitada'
+    assert set(resultado) == {'A', 'B'}
+
+
+def test_delete_param_nao_muta_o_dict_anterior(setup_param_manager):
+    """
+    R2: delete_param substitui o dict do cache, não o muta in-place.
+
+    Quem já segurava uma referência ao dict anterior — o merge de
+    _save_to_local_db, por exemplo — não pode vê-lo encolher embaixo.
+    """
+    pm, _, requests_mock = setup_param_manager
+
+    pm._cache['finance'] = {
+        'limit': {'type': 'int', 'value': 1},
+        'outro': {'type': 'int', 'value': 2},
+    }
+    pm._cache_timestamp['finance'] = time.time()
+    referencia_anterior = pm._cache['finance']
+
+    requests_mock.post(
+        'http://test-api.example.com/auth/token',
+        json={'access_token': 'TT', 'refresh_token': 'RR'},
+        status_code=200,
+    )
+    requests_mock.delete(
+        'http://test-api.example.com/parameters/apps/finance/params/limit',
+        json={'status': 'deleted'},
+        status_code=200,
+    )
+
+    pm.delete_param('finance', 'limit')
+
+    assert pm._cache['finance'] is not referencia_anterior
+    assert 'limit' not in pm._cache['finance']
+    assert 'limit' in referencia_anterior
+
+
+def test_publicar_cache_ignora_resposta_atrasada(setup_param_manager):
+    """
+    R5 (corolário): resposta antiga não sobrescreve cache mais novo.
+
+    Sem o CAS, a resposta atrasada devolveria o app ao dado velho por
+    até _cache_duration.
+    """
+    pm, *_ = setup_param_manager
+
+    recente = time.time()
+    atrasada = recente - 30
+
+    pm._publicar_cache('finance', {'novo': {'value': 1}}, recente)
+    pm._publicar_cache('finance', {'velho': {'value': 0}}, atrasada)
+
+    assert pm._cache['finance'] == {'novo': {'value': 1}}
+    assert pm._cache_timestamp['finance'] == recente
+
+
+def test_desarmar_breaker_ignora_resposta_atrasada(setup_param_manager):
+    """
+    R5: sucesso iniciado ANTES do erro não desarma o breaker.
+
+    Sem o CAS, uma resposta em voo desde antes da falha apagaria o
+    registro do erro e reabriria o circuito cedo demais.
+
+    A requisição começa 10s antes do erro para que a ordem seja
+    inequívoca: no empate exato de timestamp o desarme é o
+    comportamento desejado, ver a docstring de _desarmar_breaker.
+    """
+    pm, *_ = setup_param_manager
+
+    iniciada_em = time.time() - 10
+    pm._armar_breaker('finance')
+
+    pm._desarmar_breaker('finance', iniciada_em)
+    assert 'finance' in pm._api_error_timestamp
+
+    # Já uma requisição iniciada depois do erro desarma normalmente.
+    pm._desarmar_breaker('finance', time.time() + 1)
+    assert 'finance' not in pm._api_error_timestamp
+
+
+def test_clear_cache_desarma_breaker_incondicionalmente(setup_param_manager):
+    """
+    As duas semânticas sobre _api_error_timestamp são deliberadas.
+
+    clear_cache é ação explícita do operador e desarma sempre; o
+    desarme por sucesso é CAS-guardado. Uniformizar as duas reintroduz
+    a race do desarme precoce.
+    """
+    pm, *_ = setup_param_manager
+
+    pm._armar_breaker('finance')
+    pm.clear_cache('finance')
+
+    assert 'finance' not in pm._api_error_timestamp
