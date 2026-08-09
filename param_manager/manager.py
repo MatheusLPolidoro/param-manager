@@ -572,6 +572,8 @@ class ParamManager:
 
         self._cache[app_name] = res.json().get('params', {})
         self._cache_timestamp[app_name] = time.time()
+        # Invalida cache por parâmetro; ver delete_param para a ordem.
+        self.clear_cache(app_name, param_name)
         self._save_to_local_db(app_name, self._cache[app_name])
 
         return res.json()

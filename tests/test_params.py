@@ -644,3 +644,60 @@ def test_delete_param_404_cai_em_get_param(setup_param_manager):
 
     # Circuit breaker ativado para o app inteiro
     assert 'finance' in pm._api_error_timestamp
+
+
+def test_upsert_params_invalida_cache_por_parametro(setup_param_manager):
+    """
+    FIX-PM-08: upsert_params invalida _param_cache por parâmetro.
+
+    Antes, get_param seguinte batia em _is_param_cache_valid e devolvia
+    o valor anterior — por até _cache_duration (3600s com get_instance).
+    Agora, clear_cache por parâmetro invalida a entrada específica.
+
+    Além disso, o get_param seguinte não faz rede: cai no ramo do cache
+    do app (que acabou de ser atualizado com timestamp fresco) e repopula
+    a entrada por parâmetro sozinho.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    # Semeia cache por parâmetro
+    pm._cache['finance'] = {
+        'limit': {'type': 'int', 'value': 100},
+        'outro': {'type': 'int', 'value': 200},
+    }
+    pm._cache_timestamp['finance'] = time.time()
+
+    pm._param_cache['finance:limit'] = {'type': 'int', 'value': 100}
+    pm._param_cache_timestamp['finance:limit'] = time.time()
+    pm._param_cache['finance:outro'] = {'type': 'int', 'value': 200}
+    pm._param_cache_timestamp['finance:outro'] = time.time()
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.put(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        json={"params": {"limit": {"type": "int", "value": 99}}},
+        status_code=200,
+    )
+
+    pm.upsert_params("finance", "limit", value=99, param_type="int")
+
+    # Verifica que limit foi removido do cache por parâmetro
+    assert 'finance:limit' not in pm._param_cache
+    assert 'finance:limit' not in pm._param_cache_timestamp
+
+    # Verifica que outro permanece intacto (não usou ramo por-app)
+    assert 'finance:outro' in pm._param_cache
+    assert 'finance:outro' in pm._param_cache_timestamp
+
+    # get_param seguinte retorna o novo valor sem fazer GET
+    resultado = pm.get_param("finance", "limit")
+    assert resultado == 99
+
+    # Verifica que nenhuma requisição GET foi feita
+    # (apenas POST de token e PUT de upsert)
+    for req in requests_mock.request_history:
+        assert req.method != "GET"
