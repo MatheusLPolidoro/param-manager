@@ -40,6 +40,11 @@ select = ['I', 'F', 'E', 'W', 'PL', 'PT']
 preview = true
 quote-style = 'single'
 
+[tool.pytest.ini_options]
+markers = [
+    "integracao: exercita TinyDB real em disco, sem mock de persistência",
+]
+
 [tool.taskipy.tasks]
 fix = "ruff check . --fix"
 lint = "ruff check . --diff"
@@ -47,6 +52,8 @@ format = "ruff format ."
 pre_test = "task fix"
 test = "pytest . -s -x --cov=param_manager -vv"
 post_test = "python -m coverage html"
+test_unit = "pytest . -m 'not integracao' --cov=param_manager"
+test_integracao = "pytest . -m integracao"
 
 [tool.towncrier]
 package = "param_manager"
