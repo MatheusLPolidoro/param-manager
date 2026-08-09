@@ -325,8 +325,9 @@ class ParamManager:
                     registro.get('params'), dict
                 ):
                     return
-                if registro['params'].pop(param_name, None) is None:
+                if param_name not in registro['params']:
                     return
+                registro['params'].pop(param_name)
                 table.update({'params': registro['params']}, doc_ids=[1])
                 logger.info(
                     f'[ParamManager: {self._instance_name}] Parâmetro '

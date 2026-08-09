@@ -483,3 +483,61 @@ def test_delete_param_remove_do_banco_local(setup_param_manager):
 
     gravado = mock_table.update.call_args_list[0][0][0]["params"]
     assert "limite" not in gravado
+
+
+def test_remove_from_local_db_com_valor_none(setup_param_manager):
+    """
+    FIX-PM-06: parâmetro com valor None deve ser removido do banco local.
+
+    A guarda anterior fazia pop() e depois retornava se fosse None,
+    deixando a chave no registro persistido.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+    REGISTRO = {
+        'timestamp': time.time(),
+        'params': {'limite': None, 'outro': {'type': 'int', 'value': 42}},
+    }
+    # Simula leitura fresca em cada chamada, evitando aliasing do mock
+    mock_table.get.side_effect = lambda *a, **k: copy.deepcopy(REGISTRO)
+
+    pm._remove_from_local_db('finance', 'limite')
+
+    # Verifica que update foi chamado
+    mock_table.update.assert_called_once()
+    # Verifica que 'limite' foi removido mas 'outro' permanece
+    gravado = mock_table.update.call_args_list[0][0][0]['params']
+    assert 'limite' not in gravado
+    assert 'outro' in gravado
+    assert gravado['outro'] == {'type': 'int', 'value': 42}
+
+
+def test_remove_from_local_db_chave_ausente(setup_param_manager):
+    """
+    Quando a chave não existe, update não é chamado.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+    REGISTRO = {
+        'timestamp': time.time(),
+        'params': {'outro': {'type': 'int', 'value': 42}},
+    }
+    mock_table.get.side_effect = lambda *a, **k: copy.deepcopy(REGISTRO)
+
+    pm._remove_from_local_db('finance', 'inexistente')
+
+    # update não deve ser chamado quando a chave não existe
+    mock_table.update.assert_not_called()
+
+
+def test_remove_from_local_db_excecao_engolida(setup_param_manager):
+    """
+    Exceção durante leitura/escrita não escapa (mesmo padrão do FIX-PM-01).
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+    mock_table.get.side_effect = RuntimeError('registro corrompido')
+
+    # Não deve lançar exceção
+    pm._remove_from_local_db('finance', 'qualquer')
+
+    # A exceção é apenas logada, não propagada
+    # (verificável via captura de logs se necessário, mas a ausência de
+    # exceção aqui confirma o comportamento)
