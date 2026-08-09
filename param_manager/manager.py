@@ -894,7 +894,7 @@ class ParamManager:
                 self._handle_api_error(app_name, None, e)
             )
 
-    def get_param(
+    def get_param(  # noqa: PLR0911
         self, app_name: str, param_name: str, save_cache: bool = True
     ) -> Any:
         logger.info(
