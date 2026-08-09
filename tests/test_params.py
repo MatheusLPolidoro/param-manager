@@ -541,3 +541,106 @@ def test_remove_from_local_db_excecao_engolida(setup_param_manager):
     # A exceção é apenas logada, não propagada
     # (verificável via captura de logs se necessário, mas a ausência de
     # exceção aqui confirma o comportamento)
+
+
+def test_delete_param_invalida_cache_por_parametro(setup_param_manager):
+    """
+    FIX-PM-07: delete_param invalida _param_cache por parâmetro.
+
+    Antes, get_param seguinte batia em _is_param_cache_valid e devolvia
+    o valor apagado — possivelmente uma credencial revogada — por até
+    _cache_duration (3600s com get_instance).
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    # Semeia cache por parâmetro
+    pm._cache['finance'] = {
+        'limite': {'type': 'int', 'value': 100},
+        'outro': {'type': 'int', 'value': 200},
+    }
+    pm._cache_timestamp['finance'] = time.time()
+
+    pm._param_cache['finance:limite'] = {'type': 'int', 'value': 100}
+    pm._param_cache_timestamp['finance:limite'] = time.time()
+    pm._param_cache['finance:outro'] = {'type': 'int', 'value': 200}
+    pm._param_cache_timestamp['finance:outro'] = time.time()
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.delete(
+        "http://test-api.example.com/parameters/apps/finance/params/limite",
+        json={"status": "deleted"},
+        status_code=200,
+    )
+
+    pm.delete_param("finance", "limite")
+
+    # Verifica que limite foi removido do cache por parâmetro
+    assert 'finance:limite' not in pm._param_cache
+    assert 'finance:limite' not in pm._param_cache_timestamp
+
+    # Verifica que outro permanece intacto (não usou ramo por-app)
+    assert 'finance:outro' in pm._param_cache
+    assert 'finance:outro' in pm._param_cache_timestamp
+
+
+def test_delete_param_nao_chama_save_redundante(setup_param_manager):
+    """
+    FIX-PM-07b: remover escrita redundante de _save_to_local_db.
+
+    Antes, delete_param chamava _save_to_local_db(app_name, params)
+    logo após _remove_from_local_db. Era segunda aquisição de self._lock
+    sem efeito — a chave já saiu de self._cache antes.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    pm._cache['finance'] = {'limite': {'type': 'int', 'value': 100}}
+    pm._cache_timestamp['finance'] = time.time()
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.delete(
+        "http://test-api.example.com/parameters/apps/finance/params/limite",
+        json={"status": "deleted"},
+        status_code=200,
+    )
+
+    with patch.object(pm, '_save_to_local_db') as save:
+        pm.delete_param("finance", "limite")
+        # Não deve chamar _save_to_local_db
+        save.assert_not_called()
+
+
+def test_delete_param_404_cai_em_get_param(setup_param_manager):
+    """
+    FIX-PM-07c: ponta a ponta — GET 404 após delete.
+
+    Sem cache por-param, get_param desce até _fetch_param_from_api,
+    toma 404, e o except genérico arma circuit breaker. Esse é o
+    comportamento esperado hoje — está em backlog (N2) para corrigir.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/limite",
+        status_code=404,
+    )
+
+    resultado = pm.get_param("finance", "limite")
+
+    # Sem cache por-param, cai em fallback offline (que é vazio)
+    assert resultado is None
+
+    # Circuit breaker ativado para o app inteiro
+    assert 'finance' in pm._api_error_timestamp

@@ -593,12 +593,19 @@ class ParamManager:
         if app_name in self._cache:
             self._cache[app_name].pop(param_name, None)
 
+        # Invalida cache por parâmetro. Deve vir ANTES de
+        # _remove_from_local_db para evitar que um get_param concorrente
+        # repopule _param_cache a partir de um _cache ainda sujo.
+        # Chamar clear_cache de dentro de _remove_from_local_db seria
+        # deadlock: aquele método segura self._lock, que é threading.Lock
+        # (não RLock), enquanto clear_cache não adquire lock.
+        self.clear_cache(app_name, param_name)
+
         # Remoção explícita: o merge de _save_to_local_db ressuscitaria
         # a chave a partir do registro anterior, e o parâmetro apagado
         # — possivelmente uma credencial revogada — seguiria sendo
         # servido pelo fallback offline.
         self._remove_from_local_db(app_name, param_name)
-        self._save_to_local_db(app_name, self._cache.get(app_name, {}))
 
         return res.json()
 
