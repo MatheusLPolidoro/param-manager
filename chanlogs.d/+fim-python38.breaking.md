@@ -1,0 +1,1 @@
+Encerre o suporte a Python 3.8. A correção da vulnerabilidade PYSEC-2026-2270 está em uma versão do `python-dotenv` que não é publicada para 3.8, e manter a versão anterior significaria distribuir a falha. A versão mínima passa a ser 3.9.

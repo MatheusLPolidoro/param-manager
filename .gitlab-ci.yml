@@ -63,9 +63,8 @@ ruff:
   stage: teste
   script:
     - pip install --upgrade pip
-    # Sem pins aqui de propósito: os pins de requirements-dev.txt não
-    # instalam em 3.8 (coverage 7.8 exige 3.9+). O pip resolve a versão
-    # compatível com o interpretador de cada job.
+    # Sem pins aqui de propósito: o pip resolve a versão compatível com o
+    # interpretador de cada job da matriz.
     - pip install . pytest pytest-cov requests-mock
     - >-
       pytest . -m "not integracao"
@@ -78,12 +77,12 @@ ruff:
     expire_in: 1 week
   coverage: '/^TOTAL.+?(\d+\%)$/'
 
-# A biblioteca declara requires-python = ">=3.8,<=3.14". Piso, meio e a
+# A biblioteca declara requires-python = ">=3.9,<=3.14". Piso, meio e a
 # versão de uso corrente: foi uma quebra de sintaxe nova que motivou o
 # fragmento +python38.fix.md.
-testes:3.8:
+testes:3.9:
   extends: .testes
-  image: python:3.8-slim
+  image: python:3.9-slim
 
 testes:3.11:
   extends: .testes
