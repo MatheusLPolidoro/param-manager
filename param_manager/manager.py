@@ -78,7 +78,11 @@ class ParamManager:
                 )
             return cls._instances[instance_name]
 
-    def __init__(  # noqa: PLR0913, PLR0917
+    # PLR0915: o corpo passou de 50 sentenças ao ser envolvido no
+    # try/except que descarta a instância meio-construída (R7). Quebrar
+    # a resolução de configuração em outro método só moveria o problema
+    # e deixaria dois lugares para procurar.
+    def __init__(  # noqa: PLR0913, PLR0917, PLR0915
         self,
         api_url: str | None = None,
         cache_duration: int = 300,
@@ -103,123 +107,157 @@ class ParamManager:
             if getattr(self, '_initialized', False):
                 return
 
-            self._instance_name = instance_name
+            try:
+                self._instance_name = instance_name
 
-            # Carregamento de ambiente
-            if getattr(sys, 'frozen', False):
-                base_dir = sys._MEIPASS
-                dotenv_path = os.path.join(base_dir, '.env')
-            else:
-                base_dir = None
-                dotenv_path = find_dotenv()
+                # Carregamento de ambiente
+                if getattr(sys, 'frozen', False):
+                    base_dir = sys._MEIPASS
+                    dotenv_path = os.path.join(base_dir, '.env')
+                else:
+                    base_dir = None
+                    dotenv_path = find_dotenv()
 
-            load_dotenv(dotenv_path=dotenv_path)
+                load_dotenv(dotenv_path=dotenv_path)
 
-            # 4. Prioridade de Configuração (Parâmetros de código > .env)
-            # O argumento do construtor entra como fallback: sem env
-            # var, a resolução é a mesma de antes. Negativo vira 0, e
-            # não o fallback — ver _resolve_int_env.
-            self._cache_duration = self._resolve_int_env(
-                os.getenv(
-                    f'{instance_name.upper()}_CACHE_DURATION',
-                    os.getenv('CACHE_DURATION'),
-                ),
-                'CACHE_DURATION',
-                cache_duration,
-                negativo_vira=0,
-            )
-            self._username = username or os.getenv(
-                f'{instance_name.upper()}_PARAMS_USERNAME',
-                os.getenv('PARAMS_USERNAME'),
-            )
-            self._password = password or os.getenv(
-                f'{instance_name.upper()}_PARAMS_PASSWORD',
-                os.getenv('PARAMS_PASSWORD'),
-            )
-
-            self._lock = threading.Lock()
-            # Lock dedicado ao token: reaproveitar self._lock causaria
-            # reentrância com _save_to_local_db.
-            self._token_lock = threading.Lock()
-            # Lock para os dicts de cache e breaker (CL-2): protege
-            # _cache, _cache_timestamp, _param_cache,
-            # _param_cache_timestamp, _api_error_timestamp.
-            self._state_lock = threading.Lock()
-            self._token = None
-            self._refresh_token = None
-            self._token_expire_at = 0
-            # Negativo aqui já é caminho quebrado (o requests estoura),
-            # então cai no fallback, ao contrário de CACHE_DURATION.
-            self._timeout = self._resolve_int_env(
-                os.getenv('TIMEOUT'), 'TIMEOUT', timeout
-            )
-            # Janela do circuit breaker. Sem argumento e sem env var
-            # cai em _cache_duration, que era o valor implícito antes
-            # — com get_instance isso são 3600s, e um único 500
-            # transitório prendia o cliente em dado local por 1 hora.
-            bruto_cooldown = (
-                api_error_cooldown
-                if api_error_cooldown is not None
-                else os.getenv(
-                    f'{instance_name.upper()}_API_ERROR_COOLDOWN',
-                    os.getenv('API_ERROR_COOLDOWN'),
+                # 4. Prioridade de Configuração (Parâmetros de código > .env)
+                # O argumento do construtor entra como fallback: sem env
+                # var, a resolução é a mesma de antes. Negativo vira 0, e
+                # não o fallback — ver _resolve_int_env.
+                self._cache_duration = self._resolve_int_env(
+                    os.getenv(
+                        f'{instance_name.upper()}_CACHE_DURATION',
+                        os.getenv('CACHE_DURATION'),
+                    ),
+                    'CACHE_DURATION',
+                    cache_duration,
+                    negativo_vira=0,
                 )
-            )
-            # None quando não configurado: o fallback para
-            # _cache_duration é resolvido na leitura, não aqui, para
-            # continuar acompanhando quem ajusta _cache_duration depois.
-            self._api_error_cooldown = self._resolve_int_env(
-                bruto_cooldown, 'API_ERROR_COOLDOWN', None
-            )
-            self._verify_ssl = self._resolve_verify_ssl(
-                verify_ssl, instance_name
-            )
-            self._api_base_url = (
-                api_url
-                or os.getenv(f'API_{instance_name.upper()}_URL')
-                or os.getenv('API_PARAMS_URL', '')
-                or os.getenv('API_URL', '')
-            )
-
-            # 2. Isolamento do Armazenamento (TinyDB por instância)
-            env_db_path = os.getenv('LOCAL_DB_PATH')
-            if local_db_path:
-                current_dir = local_db_path
-            elif base_dir:
-                current_dir = base_dir
-            elif env_db_path:
-                current_dir = env_db_path
-            else:
-                current_dir = (
-                    os.path.dirname(dotenv_path)
-                    if dotenv_path
-                    else os.getcwd()
+                self._username = username or os.getenv(
+                    f'{instance_name.upper()}_PARAMS_USERNAME',
+                    os.getenv('PARAMS_USERNAME'),
+                )
+                self._password = password or os.getenv(
+                    f'{instance_name.upper()}_PARAMS_PASSWORD',
+                    os.getenv('PARAMS_PASSWORD'),
                 )
 
-            db_dir = os.path.join(
-                current_dir, 'param_manager', self._instance_name
-            )
-            os.makedirs(db_dir, exist_ok=True)
+                self._lock = threading.Lock()
+                # Lock dedicado ao token: reaproveitar self._lock causaria
+                # reentrância com _save_to_local_db.
+                self._token_lock = threading.Lock()
+                # Lock para os dicts de cache e breaker (CL-2): protege
+                # _cache, _cache_timestamp, _param_cache,
+                # _param_cache_timestamp, _api_error_timestamp.
+                self._state_lock = threading.Lock()
+                self._token = None
+                self._refresh_token = None
+                self._token_expire_at = 0
+                # Quem está com a vez de renovar o token. Ver
+                # _sync_obter_novo_token.
+                self._token_renewing = False
+                # Negativo aqui já é caminho quebrado (o requests estoura),
+                # então cai no fallback, ao contrário de CACHE_DURATION.
+                self._timeout = self._resolve_int_env(
+                    os.getenv('TIMEOUT'), 'TIMEOUT', timeout
+                )
+                # Janela do circuit breaker. Sem argumento e sem env var
+                # cai em _cache_duration, que era o valor implícito antes
+                # — com get_instance isso são 3600s, e um único 500
+                # transitório prendia o cliente em dado local por 1 hora.
+                bruto_cooldown = (
+                    api_error_cooldown
+                    if api_error_cooldown is not None
+                    else os.getenv(
+                        f'{instance_name.upper()}_API_ERROR_COOLDOWN',
+                        os.getenv('API_ERROR_COOLDOWN'),
+                    )
+                )
+                # None quando não configurado: o fallback para
+                # _cache_duration é resolvido na leitura, não aqui, para
+                # continuar acompanhando quem ajusta _cache_duration depois.
+                self._api_error_cooldown = self._resolve_int_env(
+                    bruto_cooldown, 'API_ERROR_COOLDOWN', None
+                )
+                self._verify_ssl = self._resolve_verify_ssl(
+                    verify_ssl, instance_name
+                )
+                self._api_base_url = (
+                    api_url
+                    or os.getenv(f'API_{instance_name.upper()}_URL')
+                    or os.getenv('API_PARAMS_URL', '')
+                    or os.getenv('API_URL', '')
+                )
 
-            # Nome do arquivo isolado por instância
-            self._db_path = os.path.join(
-                db_dir, f'params_{self._instance_name}.json'
-            )
-            self._db = TinyDB(self._db_path)
+                # 2. Isolamento do Armazenamento (TinyDB por instância)
+                env_db_path = os.getenv('LOCAL_DB_PATH')
+                if local_db_path:
+                    current_dir = local_db_path
+                elif base_dir:
+                    current_dir = base_dir
+                elif env_db_path:
+                    current_dir = env_db_path
+                else:
+                    current_dir = (
+                        os.path.dirname(dotenv_path)
+                        if dotenv_path
+                        else os.getcwd()
+                    )
 
-            self._cache = {}
-            self._cache_timestamp = {}
-            self._param_cache = {}
-            self._param_cache_timestamp = {}
-            self._api_error_timestamp = {}
+                db_dir = os.path.join(
+                    current_dir, 'param_manager', self._instance_name
+                )
+                os.makedirs(db_dir, exist_ok=True)
 
-            self._purge_plaintext_cache()
+                # Nome do arquivo isolado por instância
+                self._db_path = os.path.join(
+                    db_dir, f'params_{self._instance_name}.json'
+                )
+                self._db = TinyDB(self._db_path)
 
-            self._initialized = True
-            logger.info(
-                f'[ParamManager: {self._instance_name}] Inicializado na API:'
-                f' {self._api_base_url}'
-            )
+                self._cache = {}
+                self._cache_timestamp = {}
+                self._param_cache = {}
+                self._param_cache_timestamp = {}
+                self._api_error_timestamp = {}
+
+                self._purge_plaintext_cache()
+
+                self._initialized = True
+                logger.info(
+                    f'[ParamManager: {self._instance_name}] '
+                    f'Inicializado na API: {self._api_base_url}'
+                )
+            except Exception as e:
+                self._descartar_instancia_falha(instance_name, e)
+                raise
+
+    def _descartar_instancia_falha(self, instance_name, erro):
+        """
+        Tira do multiton a instância que não terminou de nascer.
+
+        Sem isto, o objeto meio-construído fica em `_instances` e toda
+        chamada seguinte a `get_instance` devolve o mesmo objeto
+        quebrado — o processo não se recupera sozinho.
+
+        Fechar o TinyDB já aberto é parte da limpeza, não detalhe:
+        deixá-lo aberto troca a instância morta por um arquivo travado
+        no Windows, que sobrevive às novas tentativas e é pior.
+        """
+        logger.error(
+            f'[ParamManager: {instance_name}] '
+            f'Falha na inicialização: {erro}'
+        )
+        self.__class__._instances.pop(instance_name, None)
+
+        if getattr(self, '_db', None) is not None:
+            try:
+                self._db.close()
+            except Exception as erro_close:
+                logger.error(
+                    f'Falha ao fechar o banco local na limpeza: '
+                    f'{erro_close}'
+                )
 
     @staticmethod
     def _resolve_verify_ssl(
@@ -407,6 +445,9 @@ class ParamManager:
         """
         Remove do banco local valores sensíveis gravados em claro por
         versões anteriores. Opt-in: default desligado.
+
+        Roda durante __init__ sob _lock_singleton, depois de self._lock
+        ser criado (linha 140).
         """
         bruto = os.getenv(
             f'{self._instance_name.upper()}_PURGE_PLAINTEXT_CACHE',
@@ -416,22 +457,24 @@ class ParamManager:
             return
 
         try:
-            for app_name in list(self._db.tables()):
-                table = self._db.table(app_name)
-                registro = table.get(doc_id=1)
-                if not registro or not isinstance(
-                    registro.get('params'), dict
-                ):
-                    continue
-                limpos = self._discard_unencrypted(
-                    app_name, registro['params']
-                )
-                if len(limpos) != len(registro['params']):
-                    table.update({'params': limpos}, doc_ids=[1])
-                    logger.warning(
-                        f'[ParamManager: {self._instance_name}] Valores em '
-                        f"claro removidos do cache local de '{app_name}'."
+            with self._lock:
+                for app_name in list(self._db.tables()):
+                    table = self._db.table(app_name)
+                    registro = table.get(doc_id=1)
+                    if not registro or not isinstance(
+                        registro.get('params'), dict
+                    ):
+                        continue
+                    limpos = self._discard_unencrypted(
+                        app_name, registro['params']
                     )
+                    if len(limpos) != len(registro['params']):
+                        table.update({'params': limpos}, doc_ids=[1])
+                        logger.warning(
+                            f'[ParamManager: {self._instance_name}] '
+                            f'Valores em claro removidos do cache '
+                            f"local de '{app_name}'."
+                        )
         except Exception as e:  # pragma: no cover
             logger.error(f'Falha ao purgar cache em claro: {e}')
 
@@ -569,6 +612,11 @@ class ParamManager:
         logger.info(f'[ParamManager: {self._instance_name}] Cache limpo.')
 
     def _auth_get_token(self):
+        """
+        Faz POST em /auth/token e retorna (token, refresh_token, expire_at).
+
+        **Rede fora do lock.** Atualização de estado acontece no chamador.
+        """
         if not self._username or not self._password:
             raise ValueError(
                 'Username ou password não configurados para autenticação.'
@@ -587,17 +635,25 @@ class ParamManager:
             raise Exception(f'Falha ao autenticar: {res.text}')
 
         auth_data = res.json()
-        self._token = auth_data.get('access_token')
-        self._refresh_token = auth_data.get('refresh_token')
+        token = auth_data.get('access_token')
+        refresh = auth_data.get('refresh_token')
 
         # token TTL: 30 min
-        self._token_expire_at = time.time() + 29 * 60
+        expire_at = time.time() + 29 * 60
 
-        return self._token
+        return token, refresh, expire_at
 
     def _auth_refresh_token(self):
+        """
+        Faz POST em /auth/refresh e retorna (token, refresh_token, expire_at).
+
+        **Rede fora do lock.** Atualização de estado acontece no chamador.
+
+        Se refresh falhar, retorna None para sinalizar que é preciso
+        fazer um get novo.
+        """
         if not self._refresh_token:
-            return self._auth_get_token()
+            return None
 
         url = f'{self._api_base_url}/auth/refresh'
 
@@ -608,45 +664,108 @@ class ParamManager:
         res = requests.post(url, data=data, timeout=self._timeout)
 
         if res.status_code != HTTPStatus.OK:
-            return self._auth_get_token()
+            return None
 
         auth_data = res.json()
-        self._token = auth_data.get('access_token')
-        self._refresh_token = auth_data.get('refresh_token')
+        token = auth_data.get('access_token')
+        refresh = auth_data.get('refresh_token')
 
-        self._token_expire_at = time.time() + 29 * 60
+        expire_at = time.time() + 29 * 60
 
-        return self._token
+        return token, refresh, expire_at
 
     def _get_valid_token(self):
-        # Double-checked locking: sem isso, N threads que percebem o token
-        # expirado disparam N renovações simultâneas.
-        if self._token and time.time() < self._token_expire_at:
-            return self._token
+        """
+        Retorna token válido: se não há, faz autenticação; se expirado,
+        renova. **Leitura atômica do par (_token, _token_expire_at)**.
 
+        Double-checked locking: a leitura rápida pode perder uma requisição
+        em race, mas apenas uma thread realmente faz rede.
+
+        Rede (POST) acontece FORA do lock para não bloquear outros acessos.
+        """
+        # O par é lido junto: separado, uma thread podia pegar o token
+        # novo com a expiração antiga (ou o contrário) e devolver como
+        # válido um token já vencido por até 29 minutos.
         with self._token_lock:
-            if self._token and time.time() < self._token_expire_at:
-                return self._token
-            if not self._token:
-                return self._auth_get_token()
-            return self._auth_refresh_token()
+            token = self._token
+            expire_at = self._token_expire_at
+        if token and time.time() < expire_at:
+            return token
+
+        return self._sync_obter_novo_token(token)
+
+    def _sync_obter_novo_token(self, token_visto):
+        """
+        Renova o token com apenas uma ida à rede, por mais threads que
+        cheguem juntas.
+
+        `token_visto` é o token que o chamador tinha em mãos quando
+        decidiu renovar. Se, ao pegar a vez, o token guardado já for
+        outro, alguém renovou no intervalo e o resultado dessa
+        renovação serve — é o que preserva o double-checked locking.
+        Sem essa conferência, N threads que chegam com o token expirado
+        renovam **em série**, uma ida à rede cada, e no Keycloak padrão
+        o refresh token é de uso único: a segunda invalidaria a sessão
+        que a primeira acabou de abrir.
+
+        A vez é dada por uma flag, e não por um segundo lock, porque um
+        lock aqui teria de ser segurado junto com `_token_lock` e
+        quebraria a regra `no-nesting` que CL-4 verifica. A rede
+        acontece fora de `_token_lock` para que ninguém que só queira
+        *ler* o par (token, expiração) fique preso atrás de um POST.
+        """
+        while True:
+            with self._token_lock:
+                if self._token is not None and self._token != token_visto:
+                    return self._token
+                if not self._token_renewing:
+                    self._token_renewing = True
+                    precisa_get = not self._token
+                    break
+            time.sleep(0.001)
+
+        try:
+            # Rede FORA do lock
+            if precisa_get:
+                token, refresh, expire_at = self._auth_get_token()
+            else:
+                resultado = self._auth_refresh_token()
+                if resultado is None:
+                    token, refresh, expire_at = self._auth_get_token()
+                else:
+                    token, refresh, expire_at = resultado
+
+            # Atualiza estado sob lock (escrita atômica)
+            with self._token_lock:
+                self._token = token
+                self._refresh_token = refresh
+                self._token_expire_at = expire_at
+
+            return token
+        finally:
+            # Libera a vez para as threads que estão esperando.
+            with self._token_lock:
+                self._token_renewing = False
 
     def _force_token_refresh(self):
         """
-        Renova o token sob o `_token_lock`, com re-check.
+        Força renovação do token de forma sincronizada.
 
         Chamar `_auth_refresh_token()` direto no retry de 401 furava o
-        double-checked locking de `_get_valid_token`: duas threads em
-        401 simultâneo fariam `POST /auth/refresh` com o mesmo refresh
-        token — de uso único no Keycloak padrão —, e a segunda
-        invalidaria a sessão que a primeira acabou de renovar.
+        double-checked locking: duas threads em 401 simultâneo fariam
+        `POST /auth/refresh` com o mesmo refresh token — de uso único
+        no Keycloak padrão —, e a segunda invalidaria a sessão que a
+        primeira acabou de renovar.
+
+        Passa o token que este chamador viu, e não a expiração: num 401
+        o token pode estar dentro da validade e mesmo assim ter sido
+        recusado, então o critério de "alguém já resolveu" é o token
+        ter mudado, não ter vencido.
         """
-        token_antes = self._token
         with self._token_lock:
-            # Outra thread pode ter renovado enquanto esperávamos.
-            if self._token != token_antes:
-                return self._token
-            return self._auth_refresh_token()
+            token_visto = self._token
+        return self._sync_obter_novo_token(token_visto)
 
     def _auth_headers(self):
         token = self._get_valid_token()
@@ -1111,7 +1230,8 @@ class ParamManager:
                 f'Erro de JSON na resposta da API para {app_name}: {e}'
             )
             try:
-                self._db.drop_table(app_name)
+                with self._lock:
+                    self._db.drop_table(app_name)
                 logger.warning(
                     f"Tabela local do app '{app_name}' foi limpa após "
                     f'erro de parsing da API.'
@@ -1214,8 +1334,9 @@ class ParamManager:
     ) -> Dict[str, Any]:
         logger.info(f'Buscando parâmetros localmente para o app: {app_name}')
         try:
-            table = self._db.table(app_name)
-            records = table.all()
+            with self._lock:
+                table = self._db.table(app_name)
+                records = table.all()
             if not records:
                 logger.warning(
                     f'Nenhum registro local encontrado para o app: {app_name}'
@@ -1237,7 +1358,8 @@ class ParamManager:
                 # durante indisponibilidade da API, quando o fallback
                 # offline é o que resta. Um registro ilegível de um app
                 # não pode apagar o cache de todos os outros.
-                self._db.drop_table(app_name)
+                with self._lock:
+                    self._db.drop_table(app_name)
                 logger.warning(
                     f"Tabela local do app '{app_name}' foi limpa após "
                     f'erro de leitura.'

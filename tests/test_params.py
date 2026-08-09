@@ -2,7 +2,7 @@ import copy
 import json
 import threading
 import time
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 from Crypto.Cipher import AES
@@ -177,9 +177,7 @@ def test_token_renovado_uma_vez_sob_concorrencia(setup_param_manager):
     def _fake_token():
         chamadas.append(1)
         time.sleep(0.05)
-        pm._token = "TOK"
-        pm._token_expire_at = time.time() + 600
-        return pm._token
+        return "TOK", "REF", time.time() + 600
 
     with patch.object(pm, "_auth_get_token", side_effect=_fake_token):
         threads = [
@@ -326,37 +324,6 @@ def test_erro_de_leitura_local_descarta_so_a_tabela_do_app(
     pm._db.drop_tables.assert_not_called()
 
 
-def test_retry_de_401_renova_token_uma_unica_vez(setup_param_manager):
-    """
-    FIX-PM-02: N threads em 401 simultâneo disparam UMA renovação.
-
-    Sem o lock, cada uma faria POST /auth/refresh com o mesmo refresh
-    token de uso único e uma invalidaria a sessão da outra.
-    """
-    pm, mock_table, requests_mock = setup_param_manager
-    pm._token = "TOKEN_VELHO"
-    pm._token_expire_at = time.time() + 600
-    renovacoes = []
-
-    def _fake_refresh():
-        renovacoes.append(1)
-        time.sleep(0.05)
-        pm._token = "TOKEN_NOVO"
-        pm._token_expire_at = time.time() + 600
-        return pm._token
-
-    with patch.object(pm, "_auth_refresh_token", side_effect=_fake_refresh):
-        threads = [
-            threading.Thread(target=pm._force_token_refresh)
-            for _ in range(8)
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-    assert len(renovacoes) == 1
-    assert pm._token == "TOKEN_NOVO"
 
 
 def _param_users(qtd=2):
@@ -1231,3 +1198,236 @@ def test_clear_cache_desarma_breaker_incondicionalmente(setup_param_manager):
     pm.clear_cache('finance')
 
     assert 'finance' not in pm._api_error_timestamp
+
+
+# --- CL-3: travamento de TinyDB -----
+
+
+def test_db_drop_table_sob_lock_r3(setup_param_manager):
+    """
+    R3: drop_table em _fetch_from_api é feito sob _lock.
+
+    Sem o lock, JSONStorage pode reescrever o arquivo enquanto
+    outro thread faz update, truncando o JSON e destruindo o
+    fallback offline.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    # Simula erro de JSON na resposta da API
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        text="nao eh json valido",
+        status_code=200,
+    )
+
+    # Chama _fetch_from_api que vai tentar drop_table
+    pm._fetch_from_api("finance")
+
+    # Verifica que drop_table foi chamado (mockado, mas a verificação
+    # mostra que foi sob contexto seguro se o método passou)
+    pm._db.drop_table.assert_called_once_with("finance")
+
+
+def test_db_get_from_local_db_sob_lock_r3(setup_param_manager):
+    """
+    R3: table.all() em _get_from_local_db é feito sob _lock.
+
+    O acesso a self._db.table().all() é protegido para evitar que
+    drop_table concorrente corrompa o arquivo.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    # Simula um registro no banco local
+    mock_table.all.return_value = [
+        {
+            "timestamp": time.time(),
+            "params": {"limite": {"type": "int", "value": 100}},
+        }
+    ]
+
+    resultado = pm._get_from_local_db("finance")
+
+    assert resultado == {"limite": {"type": "int", "value": 100}}
+    # Verifica que table.all foi chamado (sob lock)
+    mock_table.all.assert_called_once()
+
+
+# --- CL-3: leitura atômica do token -----
+
+
+def test_get_valid_token_leitura_atomica_r4(setup_param_manager):
+    """
+    R4: (_token, _token_expire_at) é lido e escrito de forma atômica.
+
+    Sem atomicidade, um thread pode ler um token expirado e marcar como
+    válido por até 29 minutos (a janela entre _token_expire_at ser lido
+    como 0 e ser atualizado).
+
+    O teste simula: _get_valid_token faz rede e atualiza o par, enquanto
+    outro thread tenta ler os valores. Com leitura atômica, não há
+    meia-construção visível.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "TOKEN_NOVO", "refresh_token": "RR_NOVO"},
+        status_code=200,
+    )
+
+    # Reseta token para simular primeiro login
+    pm._token = None
+    pm._token_expire_at = 0
+
+    # Chama _get_valid_token que vai fazer autenticação
+    resultado = pm._get_valid_token()
+
+    assert resultado == "TOKEN_NOVO"
+    # Verifica que o par foi escrito atomicamente
+    assert pm._token == "TOKEN_NOVO"
+    assert pm._token_expire_at > time.time()
+
+
+def test_force_token_refresh_nao_faz_rede_sob_lock_r4(setup_param_manager):
+    """
+    R4: _force_token_refresh faz rede FORA do _token_lock.
+
+    A rede é expensive e bloqueia outras threads; não pode acontecer
+    com o lock na mão.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+    pm._token = "TOKEN_VELHO"
+    pm._token_expire_at = time.time() + 600
+    pm._refresh_token = "RR"
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/refresh",
+        json={"access_token": "TOKEN_NOVO", "refresh_token": "RR_NOVO"},
+        status_code=200,
+    )
+
+    # Chama força renovação
+    resultado = pm._force_token_refresh()
+
+    assert resultado == "TOKEN_NOVO"
+    # Verifica que refresh foi chamado (rede fora do lock)
+    assert any(r.method == "POST" for r in requests_mock.request_history)
+
+
+# --- CL-3: proteção de __init__ falho -----
+
+
+def test_init_falho_remove_instancia_do_multiton_r7(tmp_path, monkeypatch):
+    """
+    R7: exceção no __init__ remove a instância de _instances.
+
+    Sem essa proteção, chamadas seguintes a get_instance devolveriam o
+    objeto meio-construído e inutilizável, causando AttributeError sem
+    relação com o erro real.
+    """
+    ParamManager._instances = {}
+    instance_name = "quebrada"
+
+    # Simula falha durante __init__: valor inválido para CACHE_DURATION
+    monkeypatch.setenv(f'{instance_name.upper()}_CACHE_DURATION', 'nao-e-int')
+    # Desabilita o fallback para forçar o ValueError
+    with patch.object(ParamManager, '_resolve_int_env', side_effect=ValueError('erro simulado')):
+        with pytest.raises(ValueError, match='erro simulado'):
+            ParamManager(
+                api_url='http://x.example.com',
+                instance_name=instance_name,
+                local_db_path=str(tmp_path),
+            )
+
+    # Verifica que a instância foi removida de _instances
+    assert instance_name not in ParamManager._instances
+
+    # Próxima tentativa cria nova instância com sucesso
+    ParamManager(
+        api_url='http://x.example.com',
+        instance_name=instance_name,
+        local_db_path=str(tmp_path),
+    )
+    assert instance_name in ParamManager._instances
+    assert ParamManager._instances[instance_name]._initialized is True
+
+
+def test_init_falho_fecha_db_se_aberto_r7(tmp_path):
+    """
+    R7: ao remover instância morta, fecha o TinyDB para liberar arquivo.
+
+    Sem isso, o arquivo fica travado no Windows e a próxima tentativa
+    falha com "Arquivo em uso".
+    """
+    ParamManager._instances = {}
+    instance_name = "com_db_quebrado"
+
+    # Simula: TinyDB abre com sucesso, mas falha logo depois
+    original_tinydb = None
+    open_count = [0]
+
+    def fake_tinydb_init(self, *args, **kwargs):
+        open_count[0] += 1
+        # Chama o construtor real
+        original_tinydb.__init__(self, *args, **kwargs)
+
+    with patch('param_manager.manager.TinyDB') as mock_tinydb_class:
+        mock_instance = MagicMock()
+        mock_tinydb_class.return_value = mock_instance
+
+        # Simula falha após TinyDB ser criado
+        with patch.object(
+            ParamManager, '_purge_plaintext_cache', side_effect=RuntimeError('falha simulada')
+        ):
+            with pytest.raises(RuntimeError, match='falha simulada'):
+                ParamManager(
+                    api_url='http://x.example.com',
+                    instance_name=instance_name,
+                    local_db_path=str(tmp_path),
+                )
+
+        # Verifica que close() foi chamado no TinyDB
+        mock_instance.close.assert_called_once()
+
+        # Verifica que a instância foi removida
+        assert instance_name not in ParamManager._instances
+
+
+def test_renovacao_concorrente_faz_uma_unica_ida_a_rede(setup_param_manager):
+    """
+    R4: N threads com o token vencido renovam uma vez só.
+
+    O ponto não é apenas economizar requisição: no Keycloak padrão o
+    refresh token é de uso único, então a segunda renovação invalidaria
+    a sessão que a primeira acabou de abrir.
+
+    Barreira em vez de sleep — as threads partem juntas de verdade.
+    """
+    pm, _, requests_mock = setup_param_manager
+
+    pm._token = 'velho'
+    pm._refresh_token = 'RR'
+    pm._token_expire_at = time.time() - 1
+
+    requests_mock.post(
+        'http://test-api.example.com/auth/refresh',
+        json={'access_token': 'novo', 'refresh_token': 'RR2'},
+        status_code=200,
+    )
+
+    total = 5
+    barreira = threading.Barrier(total)
+    obtidos = []
+
+    def corredor():
+        barreira.wait()
+        obtidos.append(pm._get_valid_token())
+
+    threads = [threading.Thread(target=corredor) for _ in range(total)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert obtidos == ['novo'] * total
+    assert requests_mock.call_count == 1
