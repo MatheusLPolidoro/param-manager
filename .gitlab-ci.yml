@@ -1,0 +1,105 @@
+# Pipeline do param-manager (biblioteca cliente publicada no PyPI).
+#
+# O runner é docker, sem privileged e com concurrent = 1: os jobs rodam em
+# série, então a ordem dos estágios é também a ordem no relógio. Segurança
+# vem primeiro de propósito — não vale gastar a matriz de testes num commit
+# que vaza segredo.
+
+stages:
+  - seguranca
+  - qualidade
+  - teste
+  - integracao
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  PIP_NO_CACHE_DIR: '1'
+  # Clone raso serve para tudo, menos para a varredura de histórico.
+  GIT_DEPTH: '20'
+
+default:
+  interruptible: true
+
+# ---------------------------------------------------------------- segurança
+
+gitleaks:
+  stage: seguranca
+  image:
+    name: zricethezav/gitleaks:latest
+    # A imagem tem ENTRYPOINT ["gitleaks"]; sem zerar, o script viraria
+    # `gitleaks gitleaks detect ...`.
+    entrypoint: ['']
+  variables:
+    # Varredura do histórico inteiro: um segredo removido no commit
+    # seguinte continua publicado e precisa ser detectado.
+    GIT_DEPTH: '0'
+  script:
+    - gitleaks detect --source . --no-banner --redact --verbose
+
+pip-audit:
+  stage: seguranca
+  image: python:3.13-slim
+  script:
+    - pip install --upgrade pip
+    - pip install pip-audit
+    # Instala o pacote para auditar o que ele realmente arrasta.
+    - pip install .
+    - pip-audit --progress-spinner off
+
+# ---------------------------------------------------------------- qualidade
+
+ruff:
+  stage: qualidade
+  image: python:3.13-slim
+  script:
+    - pip install ruff==0.11.7
+    # `check` puro: o alvo `lint` do taskipy usa --diff, que mostra a
+    # correção mas não reprova.
+    - ruff check .
+
+# ------------------------------------------------------------------- testes
+
+.testes:
+  stage: teste
+  script:
+    - pip install --upgrade pip
+    # Sem pins aqui de propósito: o pip resolve a versão compatível com o
+    # interpretador de cada job da matriz.
+    - pip install . pytest pytest-cov requests-mock
+    - >-
+      pytest . -m "not integracao"
+      --cov=param_manager --cov-report=term
+      --junitxml=report.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+    expire_in: 1 week
+  coverage: '/^TOTAL.+?(\d+\%)$/'
+
+# A biblioteca declara requires-python = ">=3.10,<=3.14". Piso, meio e a
+# versão de uso corrente: uma quebra de sintaxe nova já chegou ao PyPI
+# antes de existir esta matriz.
+testes:3.10:
+  extends: .testes
+  image: python:3.10-slim
+
+testes:3.12:
+  extends: .testes
+  image: python:3.12-slim
+
+testes:3.13:
+  extends: .testes
+  image: python:3.13-slim
+
+# --------------------------------------------------------------- integração
+
+integracao:
+  stage: integracao
+  image: python:3.13-slim
+  script:
+    - pip install --upgrade pip
+    - pip install . pytest requests-mock
+    # Estes testes escrevem num arquivo TinyDB real; nada de mock de
+    # persistência. Sem serviço externo.
+    - pytest . -m integracao -v

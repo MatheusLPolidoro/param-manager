@@ -19,5 +19,5 @@ Biblioteca para gerenciamento de parâmetros.
 from param_manager.manager import ParamManager
 
 __author__ = 'MatheusLPolidoro'
-__version__ = '0.4.2'
-__all__ = ['ParamManager', 'TinyDB']
+__version__ = '0.4.3'
+__all__ = ['ParamManager']

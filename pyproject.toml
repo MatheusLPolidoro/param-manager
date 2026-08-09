@@ -1,10 +1,13 @@
 [project]
 name = "param-manager"
-version = "0.4.2"
+version = "0.4.3"
 description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
-requires-python = ">=3.8,<=3.14"
+# Piso 3.10: python-dotenv 1.2.2, que corrige a PYSEC-2026-2270, exige
+# >=3.10. Em 3.9 o teto é 1.2.1, ainda vulnerável; em 3.8, 1.0.1. Manter
+# qualquer uma das duas significaria distribuir a falha.
+requires-python = ">=3.10,<=3.14"
 
 dependencies = [
     "tinydb>=4.8.0",
@@ -27,7 +30,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.ruff]
 line-length = 79
-exclude = ["__init__.py", "tests/*", "docs/*", "chanlogs.d/*"]
+# extend-exclude (e não exclude) para preservar a lista padrão do ruff,
+# que já ignora .venv/, dist/, build/ e afins. Usar `exclude` substitui
+# esses defaults e faz o lint varrer o ambiente virtual do projeto.
+extend-exclude = ["__init__.py", "tests/*", "docs/*", "chanlogs.d/*"]
 
 [tool.ruff.lint]
 preview = true
@@ -37,6 +43,11 @@ select = ['I', 'F', 'E', 'W', 'PL', 'PT']
 preview = true
 quote-style = 'single'
 
+[tool.pytest.ini_options]
+markers = [
+    "integracao: exercita TinyDB real em disco, sem mock de persistência",
+]
+
 [tool.taskipy.tasks]
 fix = "ruff check . --fix"
 lint = "ruff check . --diff"
@@ -44,6 +55,8 @@ format = "ruff format ."
 pre_test = "task fix"
 test = "pytest . -s -x --cov=param_manager -vv"
 post_test = "python -m coverage html"
+test_unit = "pytest . -m 'not integracao' --cov=param_manager"
+test_integracao = "pytest . -m integracao"
 
 [tool.towncrier]
 package = "param_manager"

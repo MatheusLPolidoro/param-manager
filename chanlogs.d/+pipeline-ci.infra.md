@@ -1,0 +1,1 @@
+Inclua pipeline de integração contínua com varredura de segredos no histórico, auditoria de vulnerabilidades das dependências, verificação de estilo e testes automatizados em Python 3.8, 3.11 e 3.13, além de uma suíte de integração que exercita o banco local real em vez de um substituto em memória.

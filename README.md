@@ -65,6 +65,6 @@ Quando a API está indisponível, a biblioteca automaticamente:
 
 ## Dependências
 
-- Python 3.8+
+- Python 3.10+
 - requests
 - tinydb
