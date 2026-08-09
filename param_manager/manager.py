@@ -148,8 +148,8 @@ class ParamManager:
             # None quando não configurado: o fallback para
             # _cache_duration é resolvido na leitura, não aqui, para
             # continuar acompanhando quem ajusta _cache_duration depois.
-            self._api_error_cooldown = (
-                int(bruto_cooldown) if bruto_cooldown is not None else None
+            self._api_error_cooldown = self._resolve_int_env(
+                bruto_cooldown, 'API_ERROR_COOLDOWN', None
             )
             self._verify_ssl = self._resolve_verify_ssl(
                 verify_ssl, instance_name
@@ -237,6 +237,57 @@ class ParamManager:
                     'on',
                 }
         return verify_ssl
+
+    @staticmethod
+    def _resolve_int_env(
+        bruto: int | str | None, nome: str, fallback: int | None
+    ) -> int | None:
+        """
+        Resolve um inteiro de configuração sem derrubar a construção.
+
+        Um valor malformado levantava ValueError dentro do __init__ e,
+        como __new__ já registrou a instância no multiton, sobrava um
+        objeto meio-construído e permanentemente inutilizável: quem
+        segurava a referência passava a tomar AttributeError em vez do
+        erro original. Aqui a falha vira aviso e o fallback assume.
+
+        Zero é válido e desliga o intervalo de espera. Negativo cai no
+        fallback, para que um erro de digitação não vire um jeito
+        silencioso de desligá-lo.
+        """
+        if bruto is None:
+            return fallback
+
+        valor = None
+        motivo_fallback = None
+
+        # Já é int: validar sinal
+        if isinstance(bruto, int):
+            if bruto < 0:
+                motivo_fallback = f'é negativo ({bruto})'
+            else:
+                valor = bruto
+        else:
+            # String: strip e tentar int
+            try:
+                limpo = bruto.strip()
+                if not limpo:
+                    motivo_fallback = 'vazio'
+                else:
+                    valor = int(limpo)
+                    if valor < 0:
+                        motivo_fallback = f'é negativo ({valor})'
+            except (ValueError, AttributeError) as e:
+                motivo_fallback = f'inválido ({bruto!r}): {e}'
+
+        if motivo_fallback is not None:
+            logger.warning(
+                f'[ParamManager] {nome} {motivo_fallback}; '
+                f'usando fallback.'
+            )
+            return fallback
+
+        return valor
 
     def _purge_plaintext_cache(self) -> None:
         """

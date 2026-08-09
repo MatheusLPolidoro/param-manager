@@ -701,3 +701,96 @@ def test_upsert_params_invalida_cache_por_parametro(setup_param_manager):
     # (apenas POST de token e PUT de upsert)
     for req in requests_mock.request_history:
         assert req.method != "GET"
+
+
+@pytest.mark.parametrize(
+    'valor_invalido',
+    ['', ' ', '300s', 'abc', '30.5', '-5'],
+)
+def test_api_error_cooldown_invalido_usa_cache_duration(
+    valor_invalido, monkeypatch, tmp_path, caplog
+):
+    """
+    FIX-PM-09: valores inválidos de API_ERROR_COOLDOWN não levantam,
+    caem no fallback de cache_duration com warning.
+    """
+    ParamManager._instances = {}
+    instance_name = f'test_invalid_{id(valor_invalido)}'
+    monkeypatch.setenv(f'{instance_name.upper()}_API_ERROR_COOLDOWN', valor_invalido)
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name=instance_name,
+        cache_duration=600,
+        local_db_path=str(tmp_path),
+    )
+
+    # Instância está completamente inicializada
+    assert pm._initialized is True
+    assert pm._db is not None
+
+    # Valor inválido caiu no fallback
+    assert pm._api_error_cooldown is None
+    assert pm._effective_cooldown == pm._cache_duration
+
+    # Houve aviso
+    assert any('API_ERROR_COOLDOWN' in record.message for record in caplog.records if record.levelname == 'WARNING')
+
+
+@pytest.mark.parametrize('valor_valido,esperado', [
+    ('30', 30),
+    (' 30 ', 30),
+    ('0', 0),
+])
+def test_api_error_cooldown_valido_parseado(
+    valor_valido, esperado, monkeypatch, tmp_path
+):
+    """
+    FIX-PM-09: valores válidos de API_ERROR_COOLDOWN são parseados
+    corretamente sem levantamento.
+    """
+    ParamManager._instances = {}
+    instance_name = f'test_valid_{id(valor_valido)}'
+    monkeypatch.setenv(f'{instance_name.upper()}_API_ERROR_COOLDOWN', valor_valido)
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name=instance_name,
+        cache_duration=600,
+        local_db_path=str(tmp_path),
+    )
+
+    # Instância está completamente inicializada
+    assert pm._initialized is True
+    assert pm._db is not None
+
+    # Valor válido foi parseado
+    assert pm._api_error_cooldown == esperado
+    assert pm._effective_cooldown == esperado
+
+
+def test_api_error_cooldown_zero_desativa_circuit_breaker(
+    monkeypatch, tmp_path
+):
+    """
+    FIX-PM-09: valor 0 é válido e desativa o circuit breaker
+    (verifica que _is_api_error_cached devolve False).
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('TEST_ZERO_API_ERROR_COOLDOWN', '0')
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='test_zero',
+        cache_duration=600,
+        local_db_path=str(tmp_path),
+    )
+
+    # Valor 0 foi parseado e desativa o circuit breaker
+    assert pm._api_error_cooldown == 0
+    assert pm._effective_cooldown == 0
+
+    # Simular timestamp de erro (time.time() retorna sempre False porque
+    # 0 segundos passaram, logo current_time - error_time é sempre >= 0)
+    pm._api_error_timestamp['test_app'] = time.time()
+    assert pm._is_api_error_cached('test_app') is False
