@@ -794,3 +794,101 @@ def test_api_error_cooldown_zero_desativa_circuit_breaker(
     # 0 segundos passaram, logo current_time - error_time é sempre >= 0)
     pm._api_error_timestamp['test_app'] = time.time()
     assert pm._is_api_error_cached('test_app') is False
+
+
+@pytest.mark.parametrize('valor', ['', '  ', 'abc', '30s', '10.5'])
+def test_cache_duration_invalido_cai_no_fallback(valor, monkeypatch, tmp_path, caplog):
+    """
+    FIX-PM-10: CACHE_DURATION malformado não pode derrubar a construção.
+
+    Mesmo motivo do API_ERROR_COOLDOWN: o ValueError subia depois de
+    __new__ ter registrado a instância, deixando um objeto meio-construído
+    e permanentemente inutilizável no multiton.
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('CACHE_DURATION', valor)
+
+    with caplog.at_level('WARNING'):
+        pm = ParamManager(
+            api_url='http://x.example.com',
+            instance_name='cd_ruim',
+            cache_duration=60,
+            local_db_path=str(tmp_path),
+        )
+
+    assert pm._cache_duration == 60
+    assert pm._initialized is True
+    assert pm._db is not None
+    assert any('CACHE_DURATION' in r.message for r in caplog.records)
+
+
+def test_cache_duration_negativo_vira_zero_e_nunca_cacheia(monkeypatch, tmp_path):
+    """
+    FIX-PM-10: negativo mantém "nunca cacheia", não vira cache de 1h.
+
+    Hoje um valor negativo faz _is_cache_valid devolver sempre False.
+    Mandá-lo ao fallback trocaria isso por cache longo — afrouxamento
+    silencioso numa lib que serve `secret`. O assert de comportamento,
+    e não só do campo, é o que protege a invariante.
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('CACHE_DURATION', '-1')
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='cd_negativo',
+        cache_duration=3600,
+        local_db_path=str(tmp_path),
+    )
+
+    assert pm._cache_duration == 0
+
+    pm._cache['finance'] = {'limite': {'type': 'int', 'value': 1}}
+    pm._cache_timestamp['finance'] = time.time()
+    assert pm._is_cache_valid('finance') is False
+
+
+@pytest.mark.parametrize('valor', ['', 'abc', '5s'])
+def test_timeout_invalido_cai_no_fallback(valor, monkeypatch, tmp_path):
+    """FIX-PM-10: TIMEOUT malformado também não derruba a construção."""
+    ParamManager._instances = {}
+    monkeypatch.setenv('TIMEOUT', valor)
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='to_ruim',
+        timeout=7,
+        local_db_path=str(tmp_path),
+    )
+
+    assert pm._timeout == 7
+    assert pm._initialized is True
+    assert pm._db is not None
+
+
+def test_instancia_segue_utilizavel_apos_valor_invalido(monkeypatch, tmp_path):
+    """
+    FIX-PM-10: regressão do motivo original.
+
+    Antes, a exceção no __init__ deixava no multiton um objeto sem _db e
+    sem caches; a chamada seguinte devolvia esse cadáver e o consumidor
+    tomava AttributeError sem relação com o erro real.
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('CACHE_DURATION', 'nao-e-numero')
+
+    ParamManager(
+        api_url='http://x.example.com',
+        instance_name='sobrevivente',
+        cache_duration=42,
+        local_db_path=str(tmp_path),
+    )
+    segunda = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='sobrevivente',
+        local_db_path=str(tmp_path),
+    )
+
+    assert segunda._db is not None
+    assert segunda._cache_duration == 42
+    assert segunda.get_cache_info() is not None

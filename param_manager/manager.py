@@ -110,11 +110,17 @@ class ParamManager:
             load_dotenv(dotenv_path=dotenv_path)
 
             # 4. Prioridade de Configuração (Parâmetros de código > .env)
-            self._cache_duration = int(
+            # O argumento do construtor entra como fallback: sem env
+            # var, a resolução é a mesma de antes. Negativo vira 0, e
+            # não o fallback — ver _resolve_int_env.
+            self._cache_duration = self._resolve_int_env(
                 os.getenv(
                     f'{instance_name.upper()}_CACHE_DURATION',
-                    os.getenv('CACHE_DURATION', cache_duration),
-                )
+                    os.getenv('CACHE_DURATION'),
+                ),
+                'CACHE_DURATION',
+                cache_duration,
+                negativo_vira=0,
             )
             self._username = username or os.getenv(
                 f'{instance_name.upper()}_PARAMS_USERNAME',
@@ -132,7 +138,11 @@ class ParamManager:
             self._token = None
             self._refresh_token = None
             self._token_expire_at = 0
-            self._timeout = int(os.getenv('TIMEOUT', timeout))
+            # Negativo aqui já é caminho quebrado (o requests estoura),
+            # então cai no fallback, ao contrário de CACHE_DURATION.
+            self._timeout = self._resolve_int_env(
+                os.getenv('TIMEOUT'), 'TIMEOUT', timeout
+            )
             # Janela do circuit breaker. Sem argumento e sem env var
             # cai em _cache_duration, que era o valor implícito antes
             # — com get_instance isso são 3600s, e um único 500
@@ -239,8 +249,11 @@ class ParamManager:
         return verify_ssl
 
     @staticmethod
-    def _resolve_int_env(
-        bruto: int | str | None, nome: str, fallback: int | None
+    def _resolve_int_env(  # noqa: PLR0913, PLR0917
+        bruto: int | str | None,
+        nome: str,
+        fallback: int | None,
+        negativo_vira: int | None = None,
     ) -> int | None:
         """
         Resolve um inteiro de configuração sem derrubar a construção.
@@ -251,19 +264,28 @@ class ParamManager:
         segurava a referência passava a tomar AttributeError em vez do
         erro original. Aqui a falha vira aviso e o fallback assume.
 
-        Zero é válido e desliga o intervalo de espera. Negativo cai no
-        fallback, para que um erro de digitação não vire um jeito
-        silencioso de desligá-lo.
+        Zero é sempre válido. Negativo cai no fallback por padrão, para
+        que um erro de digitação não vire um jeito silencioso de
+        desligar o intervalo de espera.
+
+        `negativo_vira` existe para CACHE_DURATION, onde o padrão seria
+        perigoso: hoje um valor negativo faz `_is_cache_valid` devolver
+        sempre False, ou seja, nunca cacheia. Mandá-lo para o fallback
+        transformaria "nunca cacheia" em "cacheia por uma hora" — um
+        afrouxamento silencioso numa biblioteca que serve `secret`.
+        Mapeando para 0, o comportamento observável fica idêntico.
         """
         if bruto is None:
             return fallback
 
         valor = None
         motivo_fallback = None
+        negativo = False
 
         # Já é int: validar sinal
         if isinstance(bruto, int):
             if bruto < 0:
+                negativo = True
                 motivo_fallback = f'é negativo ({bruto})'
             else:
                 valor = bruto
@@ -276,11 +298,19 @@ class ParamManager:
                 else:
                     valor = int(limpo)
                     if valor < 0:
+                        negativo = True
                         motivo_fallback = f'é negativo ({valor})'
+                        valor = None
             except (ValueError, AttributeError) as e:
                 motivo_fallback = f'inválido ({bruto!r}): {e}'
 
         if motivo_fallback is not None:
+            if negativo and negativo_vira is not None:
+                logger.warning(
+                    f'[ParamManager] {nome} {motivo_fallback}; '
+                    f'usando {negativo_vira}.'
+                )
+                return negativo_vira
             logger.warning(
                 f'[ParamManager] {nome} {motivo_fallback}; '
                 f'usando fallback.'
