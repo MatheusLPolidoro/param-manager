@@ -11,6 +11,10 @@ Biblioteca Python orientada a objetos que implementa o padrão Singleton para in
 - **Fallback Automático**: Utiliza dados locais quando a API está indisponível
 - **Recuperação de Parâmetros**: Permite buscar todos os parâmetros de um app ou um parâmetro específico
 
+## Fluxo de resolução
+
+![Fluxo do cliente](docs/assets/fluxo-cliente.png)
+
 ## Instalação
 
 ```bash
