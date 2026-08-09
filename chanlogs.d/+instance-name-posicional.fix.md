@@ -1,0 +1,1 @@
+Corrija o registro da instância quando `instance_name` é informado de forma posicional: antes, o gerenciador era configurado com o nome correto mas registrado sob o nome padrão, fazendo duas instâncias lógicas compartilharem o mesmo espaço.

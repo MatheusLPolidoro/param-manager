@@ -1,0 +1,1 @@
+Restrinja a limpeza do banco local ao app envolvido: um erro de leitura da API ou do próprio arquivo passa a descartar apenas a tabela daquele app, em vez de apagar o cache offline de todas as aplicações.

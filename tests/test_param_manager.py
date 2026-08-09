@@ -169,10 +169,13 @@ def test_get_param_from_api_with_individual_cache(
         param1 = param_manager.get_param('test_app', 'PARAM1')
 
         # Verifica se a API foi chamada corretamente
+        # headers={} porque o endpoint de token não está mockado aqui:
+        # a leitura segue sem autenticação, como em servidor sem auth.
         mock_get.assert_called_once_with(
             'http://test-api.example.com/parameters/apps/test_app/params/PARAM1',
             timeout=2,
             verify=False,
+            headers={},
         )
 
         # Verifica se o parâmetro foi retornado corretamente
@@ -225,6 +228,7 @@ def test_get_param_from_global_cache(setup_param_manager, mock_response_data):
             'http://test-api.example.com/parameters/apps/test_app/params/',
             timeout=2,
             verify=False,
+            headers={},
         )
 
         # Reseta o mock para a próxima chamada
