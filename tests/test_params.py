@@ -619,11 +619,16 @@ def test_delete_param_nao_chama_save_redundante(setup_param_manager):
 
 def test_delete_param_404_cai_em_get_param(setup_param_manager):
     """
-    FIX-PM-07c: ponta a ponta — GET 404 após delete.
+    FIX-PM-07c: ponta a ponta — GET 404 após delete (COMPORTAMENTO CORRIGIDO).
 
     Sem cache por-param, get_param desce até _fetch_param_from_api,
-    toma 404, e o except genérico arma circuit breaker. Esse é o
-    comportamento esperado hoje — está em backlog (N2) para corrigir.
+    toma 404, e agora é tratado como ParamNaoEncontradoError que NÃO arma
+    o circuit breaker — 404 significa "recurso ausente", não "servidor
+    indisponível". A biblioteca retorna None (fallback offline vazio),
+    permitindo consultas futuras sem entrar em cooldown.
+
+    Este teste registra que o comportamento foi corrigido em relação ao
+    registro anterior.
     """
     pm, mock_table, requests_mock = setup_param_manager
 
@@ -642,8 +647,8 @@ def test_delete_param_404_cai_em_get_param(setup_param_manager):
     # Sem cache por-param, cai em fallback offline (que é vazio)
     assert resultado is None
 
-    # Circuit breaker ativado para o app inteiro
-    assert 'finance' in pm._api_error_timestamp
+    # Circuit breaker NÃO é ativado para 404 — só para indisponibilidade real
+    assert 'finance' not in pm._api_error_timestamp
 
 
 def test_upsert_params_invalida_cache_por_parametro(setup_param_manager):
@@ -892,3 +897,171 @@ def test_instancia_segue_utilizavel_apos_valor_invalido(monkeypatch, tmp_path):
     assert segunda._db is not None
     assert segunda._cache_duration == 42
     assert segunda.get_cache_info() is not None
+
+
+def test_404_get_param_nao_arma_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 404 em get_param NÃO arma circuit breaker.
+
+    Um 404 significa "recurso não encontrado", não "servidor indisponível".
+    Portanto, _api_error_timestamp deve permanecer vazio.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        status_code=404,
+    )
+
+    resultado = pm.get_param("finance", "saldo")
+    assert resultado is None
+    assert 'finance' not in pm._api_error_timestamp
+
+
+def test_404_get_param_depois_200_bate_api(setup_param_manager):
+    """
+    FIX-PM-11: 404 seguido de 200 em get_param bate na API.
+
+    Como 404 não arma o breaker, a próxima chamada deve fazer uma nova
+    requisição à API em vez de usar fallback offline.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    # Primeira chamada retorna 404
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        [
+            {"status_code": 404},
+            {
+                "json": {"param": {"type": "int", "value": 1000}},
+                "status_code": 200,
+            },
+        ],
+    )
+
+    # Primeira chamada: 404
+    resultado1 = pm.get_param("finance", "saldo")
+    assert resultado1 is None
+
+    # Segunda chamada: bate na API e retorna 200
+    resultado2 = pm.get_param("finance", "saldo")
+    assert resultado2 == 1000
+
+
+def test_500_em_get_param_continua_armando_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 500 em get_param CONTINUA armando o circuit breaker.
+
+    Um 500 (erro de servidor) deve ativar o cooldown normalmente.
+    Regressão: este teste garante que apenas 404 é tratado diferentemente.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        status_code=500,
+    )
+
+    resultado = pm.get_param("finance", "saldo")
+    assert resultado is None
+    assert 'finance' in pm._api_error_timestamp
+
+
+def test_401_em_get_param_continua_armando_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 401 em get_param CONTINUA armando o circuit breaker.
+
+    Um 401 (não autorizado) deve ativar o cooldown normalmente.
+    Regressão: este teste garante que apenas 404 é tratado diferentemente.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        status_code=401,
+    )
+
+    resultado = pm.get_param("finance", "saldo")
+    assert resultado is None
+    assert 'finance' in pm._api_error_timestamp
+
+
+def test_404_get_all_params_nao_arma_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 404 em get_all_params NÃO arma circuit breaker.
+
+    Um 404 em get_all_params deve ter o mesmo comportamento que em
+    get_param: não ativa o cooldown.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        status_code=404,
+    )
+
+    resultado = pm.get_all_params("finance")
+    assert resultado == {}
+    assert 'finance' not in pm._api_error_timestamp
+
+
+def test_404_nao_desarma_breaker_ja_armado(setup_param_manager):
+    """
+    FIX-PM-11: 404 NÃO desarma um breaker já armado.
+
+    Se o breaker está armado por um erro real (500, timeout),
+    um 404 subsequente não deve limpá-lo. O breaker só é desarmado
+    por uma resposta 200.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+
+    # Primeiro, arma o breaker com um 500
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        status_code=500,
+    )
+    pm.get_all_params("finance")
+    assert 'finance' in pm._api_error_timestamp
+
+    # Reset o mock para retornar 404 na próxima chamada
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        status_code=404,
+    )
+
+    # Chama novamente: o breaker já está armado, vai usar fallback
+    pm.get_all_params("finance")
+
+    # O breaker deve CONTINUAR armado (404 não o limpa)
+    assert 'finance' in pm._api_error_timestamp

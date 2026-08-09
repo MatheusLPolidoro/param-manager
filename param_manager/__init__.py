@@ -16,8 +16,8 @@ ParamManager
 Biblioteca para gerenciamento de parâmetros.
 
 """
-from param_manager.manager import ParamManager
+from param_manager.manager import ParamManager, ParamNaoEncontradoError
 
 __author__ = 'MatheusLPolidoro'
 __version__ = '0.4.3'
-__all__ = ['ParamManager']
+__all__ = ['ParamManager', 'ParamNaoEncontradoError']

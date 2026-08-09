@@ -47,6 +47,9 @@ quote-style = 'single'
 markers = [
     "integracao: exercita TinyDB real em disco, sem mock de persistência",
 ]
+# Testes de concorrência que travarem dumpam o stack de TODAS as threads
+# em vez de pendurar o job até o timeout do runner.
+faulthandler_timeout = 60
 
 [tool.taskipy.tasks]
 fix = "ruff check . --fix"

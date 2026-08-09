@@ -43,6 +43,12 @@ def _is_envelope(value: Any) -> bool:
     )
 
 
+class ParamNaoEncontradoError(Exception):
+    """Levantada quando um parâmetro retorna 404 (não encontrado)."""
+
+    pass
+
+
 class ParamManager:
     _instances: ClassVar[Dict[str, 'ParamManager']] = {}
     # RLock (e não Lock) porque __new__ e __init__ adquirem o mesmo lock
@@ -865,9 +871,17 @@ class ParamManager:
         try:
             params = self._fetch_from_api(app_name)
             return ParamManager._process_parameters(params)
+        except ParamNaoEncontradoError as e:
+            logger.warning(
+                f'Parâmetros não encontrados (404) para {app_name}: '
+                f'{str(e)}'
+            )
+            return ParamManager._process_parameters(
+                self._handle_api_error(app_name, None, e)
+            )
         except (Timeout, ConnectionError) as e:
             logger.error(f'Erro de conexão/timeout: {str(e)}')
-            self._api_error_timestamp[app_name] = time.time()
+            self._armar_breaker(app_name)
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
@@ -875,7 +889,7 @@ class ParamManager:
             logger.error(f'Erro inesperado ao buscar da API: {str(e)}')
             # Erro HTTP também precisa armar o cooldown, senão a lib
             # martela um servidor que está devolvendo 500.
-            self._api_error_timestamp[app_name] = time.time()
+            self._armar_breaker(app_name)
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
@@ -924,12 +938,23 @@ class ParamManager:
             if not isinstance(param_value, dict):
                 param_value = dict()
             return ParamManager._extract_value(param_value)
+        except ParamNaoEncontradoError as e:
+            logger.warning(
+                f'Parâmetro não encontrado (404) na API:'
+                f'{app_name=} {param_name=} {save_cache=} {str(e)}'
+            )
+            params = self._handle_api_error(app_name, param_name, e)
+            return (
+                ParamManager._extract_value(params.get(param_name, dict()))
+                if params
+                else None
+            )
         except (Timeout, ConnectionError) as e:
             logger.error(
                 f'Erro de conexão/timeout ao buscar parâmetro da API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
             )
-            self._api_error_timestamp[app_name] = time.time()
+            self._armar_breaker(app_name)
             params = self._handle_api_error(app_name, param_name, e)
             return (
                 ParamManager._extract_value(params.get(param_name, dict()))
@@ -941,7 +966,7 @@ class ParamManager:
                 f'Erro inesperado ao buscar parâmetro da API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
             )
-            self._api_error_timestamp[app_name] = time.time()
+            self._armar_breaker(app_name)
             params = self._handle_api_error(app_name, param_name, e)
             return (
                 ParamManager._extract_value(params.get(param_name, dict()))
@@ -964,6 +989,10 @@ class ParamManager:
             headers=self._auth_headers_opcionais(),
         )
 
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            raise ParamNaoEncontradoError(
+                f'API retornou status code {response.status_code}'
+            )
         if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
 
@@ -1010,6 +1039,10 @@ class ParamManager:
             verify=self._verify_ssl,
             headers=self._auth_headers_opcionais(),
         )
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            raise ParamNaoEncontradoError(
+                f'API retornou status code {response.status_code}'
+            )
         if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
         data = response.json()
@@ -1057,6 +1090,10 @@ class ParamManager:
         if self._api_error_cooldown is not None:
             return self._api_error_cooldown
         return self._cache_duration
+
+    def _armar_breaker(self, app_name: str) -> None:
+        """Arma o circuit breaker para um app."""
+        self._api_error_timestamp[app_name] = time.time()
 
     def _is_api_error_cached(self, app_name: str) -> bool:
         if app_name not in self._api_error_timestamp:
