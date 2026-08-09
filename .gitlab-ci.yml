@@ -77,16 +77,16 @@ ruff:
     expire_in: 1 week
   coverage: '/^TOTAL.+?(\d+\%)$/'
 
-# A biblioteca declara requires-python = ">=3.9,<=3.14". Piso, meio e a
-# versão de uso corrente: foi uma quebra de sintaxe nova que motivou o
-# fragmento +python38.fix.md.
-testes:3.9:
+# A biblioteca declara requires-python = ">=3.10,<=3.14". Piso, meio e a
+# versão de uso corrente: uma quebra de sintaxe nova já chegou ao PyPI
+# antes de existir esta matriz.
+testes:3.10:
   extends: .testes
-  image: python:3.9-slim
+  image: python:3.10-slim
 
-testes:3.11:
+testes:3.12:
   extends: .testes
-  image: python:3.11-slim
+  image: python:3.12-slim
 
 testes:3.13:
   extends: .testes

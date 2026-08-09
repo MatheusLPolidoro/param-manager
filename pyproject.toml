@@ -4,9 +4,10 @@ version = "0.4.3"
 description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
-# Piso 3.9: python-dotenv 1.2.2, que corrige a PYSEC-2026-2270, não é
-# publicado para 3.8. Manter 3.8 exigiria entregar a 1.0.1, vulnerável.
-requires-python = ">=3.9,<=3.14"
+# Piso 3.10: python-dotenv 1.2.2, que corrige a PYSEC-2026-2270, exige
+# >=3.10. Em 3.9 o teto é 1.2.1, ainda vulnerável; em 3.8, 1.0.1. Manter
+# qualquer uma das duas significaria distribuir a falha.
+requires-python = ">=3.10,<=3.14"
 
 dependencies = [
     "tinydb>=4.8.0",
