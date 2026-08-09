@@ -43,10 +43,17 @@ def _is_envelope(value: Any) -> bool:
     )
 
 
-class ParamNaoEncontradoError(Exception):
+class ParamNotFoundError(Exception):
     """Levantada quando um parâmetro retorna 404 (não encontrado)."""
 
     pass
+
+
+# Alias de compatibilidade. O nome em português é o que foi publicado no
+# PyPI e está em uso em código de terceiros; como é a MESMA classe, e não
+# uma subclasse, `except ParamNaoEncontradoError` continua capturando o
+# que esta biblioteca levanta. Não remover sem uma major.
+ParamNaoEncontradoError = ParamNotFoundError
 
 
 class ParamManager:
@@ -131,7 +138,7 @@ class ParamManager:
                     ),
                     'CACHE_DURATION',
                     cache_duration,
-                    negativo_vira=0,
+                    negative_becomes=0,
                 )
                 self._username = username or os.getenv(
                     f'{instance_name.upper()}_PARAMS_USERNAME',
@@ -154,7 +161,7 @@ class ParamManager:
                 self._refresh_token = None
                 self._token_expire_at = 0
                 # Quem está com a vez de renovar o token. Ver
-                # _sync_obter_novo_token.
+                # _sync_get_new_token.
                 self._token_renewing = False
                 # Negativo aqui já é caminho quebrado (o requests estoura),
                 # então cai no fallback, ao contrário de CACHE_DURATION.
@@ -229,10 +236,10 @@ class ParamManager:
                     f'Inicializado na API: {self._api_base_url}'
                 )
             except Exception as e:
-                self._descartar_instancia_falha(instance_name, e)
+                self._discard_failed_instance(instance_name, e)
                 raise
 
-    def _descartar_instancia_falha(self, instance_name, erro):
+    def _discard_failed_instance(self, instance_name, error):
         """
         Tira do multiton a instância que não terminou de nascer.
 
@@ -246,7 +253,7 @@ class ParamManager:
         """
         logger.error(
             f'[ParamManager: {instance_name}] '
-            f'Falha na inicialização: {erro}'
+            f'Falha na inicialização: {error}'
         )
         self.__class__._instances.pop(instance_name, None)
 
@@ -298,10 +305,10 @@ class ParamManager:
 
     @staticmethod
     def _resolve_int_env(  # noqa: PLR0913, PLR0917
-        bruto: int | str | None,
-        nome: str,
+        raw: int | str | None,
+        name: str,
         fallback: int | None,
-        negativo_vira: int | None = None,
+        negative_becomes: int | None = None,
     ) -> int | None:
         """
         Resolve um inteiro de configuração sem derrubar a construção.
@@ -316,14 +323,14 @@ class ParamManager:
         que um erro de digitação não vire um jeito silencioso de
         desligar o intervalo de espera.
 
-        `negativo_vira` existe para CACHE_DURATION, onde o padrão seria
+        `negative_becomes` existe para CACHE_DURATION, onde o padrão seria
         perigoso: hoje um valor negativo faz `_is_cache_valid` devolver
         sempre False, ou seja, nunca cacheia. Mandá-lo para o fallback
         transformaria "nunca cacheia" em "cacheia por uma hora" — um
         afrouxamento silencioso numa biblioteca que serve `secret`.
         Mapeando para 0, o comportamento observável fica idêntico.
         """
-        if bruto is None:
+        if raw is None:
             return fallback
 
         valor = None
@@ -331,16 +338,16 @@ class ParamManager:
         negativo = False
 
         # Já é int: validar sinal
-        if isinstance(bruto, int):
-            if bruto < 0:
+        if isinstance(raw, int):
+            if raw < 0:
                 negativo = True
-                motivo_fallback = f'é negativo ({bruto})'
+                motivo_fallback = f'é negativo ({raw})'
             else:
-                valor = bruto
+                valor = raw
         else:
             # String: strip e tentar int
             try:
-                limpo = bruto.strip()
+                limpo = raw.strip()
                 if not limpo:
                     motivo_fallback = 'vazio'
                 else:
@@ -350,17 +357,17 @@ class ParamManager:
                         motivo_fallback = f'é negativo ({valor})'
                         valor = None
             except (ValueError, AttributeError) as e:
-                motivo_fallback = f'inválido ({bruto!r}): {e}'
+                motivo_fallback = f'inválido ({raw!r}): {e}'
 
         if motivo_fallback is not None:
-            if negativo and negativo_vira is not None:
+            if negativo and negative_becomes is not None:
                 logger.warning(
-                    f'[ParamManager] {nome} {motivo_fallback}; '
-                    f'usando {negativo_vira}.'
+                    f'[ParamManager] {name} {motivo_fallback}; '
+                    f'usando {negative_becomes}.'
                 )
-                return negativo_vira
+                return negative_becomes
             logger.warning(
-                f'[ParamManager] {nome} {motivo_fallback}; usando fallback.'
+                f'[ParamManager] {name} {motivo_fallback}; usando fallback.'
             )
             return fallback
 
@@ -380,8 +387,8 @@ class ParamManager:
         with self._state_lock:
             return dict(self._cache.get(app, {}))
 
-    def _publicar_cache(
-        self, app: str, params: Dict[str, Any], iniciado_em: float
+    def _publish_cache(
+        self, app: str, params: Dict[str, Any], started_at: float
     ) -> None:
         """
         Atualiza cache apenas se não foi escrito mais recentemente (CAS).
@@ -389,16 +396,16 @@ class ParamManager:
         Impede que uma resposta atrasada sobrescreva cache mais novo.
         """
         with self._state_lock:
-            if self._cache_timestamp.get(app, 0) <= iniciado_em:
+            if self._cache_timestamp.get(app, 0) <= started_at:
                 self._cache[app] = params
-                self._cache_timestamp[app] = iniciado_em
+                self._cache_timestamp[app] = started_at
 
-    def _armar_breaker(self, app_name: str) -> None:
+    def _arm_breaker(self, app_name: str) -> None:
         """Arma o circuit breaker para um app."""
         with self._state_lock:
             self._api_error_timestamp[app_name] = time.time()
 
-    def _desarmar_breaker(self, app: str, iniciado_em: float) -> None:
+    def _disarm_breaker(self, app: str, started_at: float) -> None:
         """
         Desarma o breaker apenas se foi armado antes desta requisição (CAS).
 
@@ -415,10 +422,10 @@ class ParamManager:
         comparação é `<=` e não `<`.
         """
         with self._state_lock:
-            if self._api_error_timestamp.get(app, 0) <= iniciado_em:
+            if self._api_error_timestamp.get(app, 0) <= started_at:
                 self._api_error_timestamp.pop(app, None)
 
-    def _breaker_ativo(self, app: str) -> bool:
+    def _breaker_active(self, app: str) -> bool:
         """Diz se o circuit breaker está ativo para este app."""
         with self._state_lock:
             if app not in self._api_error_timestamp:
@@ -588,7 +595,7 @@ class ParamManager:
                 self._cache_timestamp.pop(app_name, None)
                 # IMPORTANTE: clear_cache é ação explícita do operador
                 # e desarma o breaker incondicionalmente. O desarme por
-                # sucesso de requisição é CAS-guardado em _desarmar_breaker
+                # sucesso de requisição é CAS-guardado em _disarm_breaker
                 # — duas semânticas diferentes sobre o mesmo dict. Sem este
                 # comentário, o próximo leitor "uniformiza" e reintroduz a
                 # race do desarme precoce (R5).
@@ -693,14 +700,14 @@ class ParamManager:
         if token and time.time() < expire_at:
             return token
 
-        return self._sync_obter_novo_token(token)
+        return self._sync_get_new_token(token)
 
-    def _sync_obter_novo_token(self, token_visto):
+    def _sync_get_new_token(self, seen_token):
         """
         Renova o token com apenas uma ida à rede, por mais threads que
         cheguem juntas.
 
-        `token_visto` é o token que o chamador tinha em mãos quando
+        `seen_token` é o token que o chamador tinha em mãos quando
         decidiu renovar. Se, ao pegar a vez, o token guardado já for
         outro, alguém renovou no intervalo e o resultado dessa
         renovação serve — é o que preserva o double-checked locking.
@@ -717,7 +724,7 @@ class ParamManager:
         """
         while True:
             with self._token_lock:
-                if self._token is not None and self._token != token_visto:
+                if self._token is not None and self._token != seen_token:
                     return self._token
                 if not self._token_renewing:
                     self._token_renewing = True
@@ -764,14 +771,14 @@ class ParamManager:
         ter mudado, não ter vencido.
         """
         with self._token_lock:
-            token_visto = self._token
-        return self._sync_obter_novo_token(token_visto)
+            seen_token = self._token
+        return self._sync_get_new_token(seen_token)
 
     def _auth_headers(self):
         token = self._get_valid_token()
         return {'Authorization': f'Bearer {token}'}
 
-    def _auth_headers_opcionais(self) -> Dict[str, str]:
+    def _auth_headers_optional(self) -> Dict[str, str]:
         """
         Header de autenticação para os caminhos de leitura.
 
@@ -869,7 +876,7 @@ class ParamManager:
         # autoritativa e precisa vencer o CAS. Trocar por um instante
         # anterior à chamada faria um GET concorrente mais novo derrubar
         # a escrita que o próprio chamador acabou de fazer.
-        self._publicar_cache(app_name, params, time.time())
+        self._publish_cache(app_name, params, time.time())
         # Invalida cache por parâmetro; ver delete_param para a ordem.
         self.clear_cache(app_name, param_name)
         # Passa snapshot do cache para evitar iteração em estrutura viva.
@@ -994,7 +1001,7 @@ class ParamManager:
         if params.get('type') == 'secret':
             raw = params.get('value')
             if isinstance(raw, dict):
-                params['value'] = ParamManager._descriptografar_param(raw)
+                params['value'] = ParamManager._decrypt_param(raw)
         elif params.get('type') == 'users':
             raw = params.get('value')
             if isinstance(raw, list):
@@ -1002,14 +1009,14 @@ class ParamManager:
                     if isinstance(item, dict) and isinstance(
                         item.get('password'), dict
                     ):
-                        item['password'] = ParamManager._descriptografar_param(
+                        item['password'] = ParamManager._decrypt_param(
                             item['password']
                         )
         elif params.get('type') == 'user':
             raw = params.get('value')
             if isinstance(raw, dict):
                 if isinstance(raw.get('password'), dict):
-                    raw['password'] = ParamManager._descriptografar_param(
+                    raw['password'] = ParamManager._decrypt_param(
                         raw['password']
                     )
         return params
@@ -1023,7 +1030,7 @@ class ParamManager:
         return param_value.get('value')
 
     @staticmethod
-    def _descriptografar_param(value: dict) -> str | None:
+    def _decrypt_param(value: dict) -> str | None:
         try:
             if not all(
                 k in value for k in ['salt', 'master_key', 'crypto_data']
@@ -1083,7 +1090,7 @@ class ParamManager:
             return ParamManager._process_parameters(
                 self._snapshot_cache(app_name)
             )
-        if self._breaker_ativo(app_name):
+        if self._breaker_active(app_name):
             logger.warning(
                 f'API para {app_name} está em cooldown.'
                 f'Usando dados locais ou cache.'
@@ -1095,7 +1102,7 @@ class ParamManager:
         try:
             params = self._fetch_from_api(app_name)
             return ParamManager._process_parameters(params)
-        except ParamNaoEncontradoError as e:
+        except ParamNotFoundError as e:
             logger.warning(
                 f'Parâmetros não encontrados (404) para {app_name}: {str(e)}'
             )
@@ -1104,7 +1111,7 @@ class ParamManager:
             )
         except (Timeout, ConnectionError) as e:
             logger.error(f'Erro de conexão/timeout: {str(e)}')
-            self._armar_breaker(app_name)
+            self._arm_breaker(app_name)
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
@@ -1112,7 +1119,7 @@ class ParamManager:
             logger.error(f'Erro inesperado ao buscar da API: {str(e)}')
             # Erro HTTP também precisa armar o cooldown, senão a lib
             # martela um servidor que está devolvendo 500.
-            self._armar_breaker(app_name)
+            self._arm_breaker(app_name)
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
@@ -1147,7 +1154,7 @@ class ParamManager:
                     self._param_cache[param_cache_key] = param_value
                     self._param_cache_timestamp[param_cache_key] = time.time()
                 return ParamManager._extract_value(param_value)
-        if self._breaker_ativo(app_name):
+        if self._breaker_active(app_name):
             logger.warning(
                 f'API para {app_name} está em cooldown. Usando dados locais.'
             )
@@ -1164,7 +1171,7 @@ class ParamManager:
             if not isinstance(param_value, dict):
                 param_value = dict()
             return ParamManager._extract_value(param_value)
-        except ParamNaoEncontradoError as e:
+        except ParamNotFoundError as e:
             logger.warning(
                 f'Parâmetro não encontrado (404) na API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
@@ -1180,7 +1187,7 @@ class ParamManager:
                 f'Erro de conexão/timeout ao buscar parâmetro da API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
             )
-            self._armar_breaker(app_name)
+            self._arm_breaker(app_name)
             params = self._handle_api_error(app_name, param_name, e)
             return (
                 ParamManager._extract_value(params.get(param_name, dict()))
@@ -1192,7 +1199,7 @@ class ParamManager:
                 f'Erro inesperado ao buscar parâmetro da API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
             )
-            self._armar_breaker(app_name)
+            self._arm_breaker(app_name)
             params = self._handle_api_error(app_name, param_name, e)
             return (
                 ParamManager._extract_value(params.get(param_name, dict()))
@@ -1208,16 +1215,16 @@ class ParamManager:
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
         logger.info(f'Buscando todos os parâmetros da API: {url}')
 
-        iniciado_em = time.time()
+        started_at = time.time()
         response = requests.get(
             url,
             timeout=self._timeout,
             verify=self._verify_ssl,
-            headers=self._auth_headers_opcionais(),
+            headers=self._auth_headers_optional(),
         )
 
         if response.status_code == HTTPStatus.NOT_FOUND:
-            raise ParamNaoEncontradoError(
+            raise ParamNotFoundError(
                 f'API retornou status code {response.status_code}'
             )
         if response.status_code != HTTPStatus.OK:
@@ -1243,14 +1250,14 @@ class ParamManager:
         params = data.get('params', {})
 
         # CAS: não sobrescreve cache mais novo (R5).
-        self._publicar_cache(app_name, params, iniciado_em)
+        self._publish_cache(app_name, params, started_at)
 
         if save_cache:
             # Passa snapshot para evitar iteração em estrutura viva (R1).
             self._save_to_local_db(app_name, self._snapshot_cache(app_name))
 
         # CAS: só desarma se o breaker foi armado antes desta requisição.
-        self._desarmar_breaker(app_name, iniciado_em)
+        self._disarm_breaker(app_name, started_at)
 
         return params
 
@@ -1262,15 +1269,15 @@ class ParamManager:
             f'{app_name}/params/{param_name}'
         )
         logger.info(f'Buscando parâmetro específico da API: {url}')
-        iniciado_em = time.time()
+        started_at = time.time()
         response = requests.get(
             url,
             timeout=self._timeout,
             verify=self._verify_ssl,
-            headers=self._auth_headers_opcionais(),
+            headers=self._auth_headers_optional(),
         )
         if response.status_code == HTTPStatus.NOT_FOUND:
-            raise ParamNaoEncontradoError(
+            raise ParamNotFoundError(
                 f'API retornou status code {response.status_code}'
             )
         if response.status_code != HTTPStatus.OK:
@@ -1293,7 +1300,7 @@ class ParamManager:
             # Passa snapshot para evitar iteração em estrutura viva (R1).
             self._save_to_local_db(app_name, self._snapshot_cache(app_name))
         # CAS: só desarma se o breaker foi armado antes desta requisição.
-        self._desarmar_breaker(app_name, iniciado_em)
+        self._disarm_breaker(app_name, started_at)
 
         return param_value
 
@@ -1431,7 +1438,7 @@ class ParamManager:
         for app_name, timestamp in error_ts.items():
             dt = datetime.fromtimestamp(timestamp)
             cooldown_ends_at = dt + timedelta(seconds=self._effective_cooldown)
-            is_cooldown_active = self._breaker_ativo(app_name)
+            is_cooldown_active = self._breaker_active(app_name)
 
             info['api_error_timestamps'][app_name] = {
                 'error_at': dt.isoformat(),

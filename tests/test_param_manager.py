@@ -601,7 +601,7 @@ def test_get_all_params_uses_local_on_api_error_cached(setup_param_manager):
     param_manager, mock_table, requests = setup_param_manager
 
     # Força o estado de erro de API anterior
-    param_manager._breaker_ativo = lambda app_name: True
+    param_manager._breaker_active = lambda app_name: True
 
     # Mock para retornar dados locais
     local_params = {
@@ -727,7 +727,7 @@ def test_get_param_from_global_cache(setup_param_manager):
 def test_get_param_api_error_cached(setup_param_manager):
     """Testa retorno de dados locais quando há erro de API anterior."""
     param_manager, *_ = setup_param_manager
-    param_manager._breaker_ativo = lambda app: True
+    param_manager._breaker_active = lambda app: True
     param_manager._get_from_local_db = lambda app, param, save_cache=True: {"PARAM1": {"value": "local_value"}}
 
     result = param_manager.get_param("test_app", "PARAM1")
@@ -1009,7 +1009,7 @@ def test_breaker_ativo_app_not_in_timestamp(setup_param_manager):
     param_manager, *_ = setup_param_manager
 
     # Nenhum erro registrado
-    assert param_manager._breaker_ativo("test_app") is False
+    assert param_manager._breaker_active("test_app") is False
 
 
 def test_breaker_ativo_true_recent_error(setup_param_manager):
@@ -1020,7 +1020,7 @@ def test_breaker_ativo_true_recent_error(setup_param_manager):
     # Simula erro ocorrido agora
     param_manager._api_error_timestamp["test_app"] = time.time()
 
-    assert param_manager._breaker_ativo("test_app") is True
+    assert param_manager._breaker_active("test_app") is True
 
 
 def test_breaker_ativo_false_expired_error(setup_param_manager):
@@ -1031,7 +1031,7 @@ def test_breaker_ativo_false_expired_error(setup_param_manager):
     # Simula erro ocorrido há 5 segundos
     param_manager._api_error_timestamp["test_app"] = time.time() - 5
 
-    assert param_manager._breaker_ativo("test_app") is False
+    assert param_manager._breaker_active("test_app") is False
 
 
 def test_get_from_local_db_no_records(setup_param_manager, caplog):

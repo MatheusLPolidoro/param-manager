@@ -238,7 +238,7 @@ def test_excecao_generica_arma_circuit_breaker(setup_param_manager):
 
     pm.get_all_params("finance")
     assert "finance" in pm._api_error_timestamp
-    assert pm._breaker_ativo("finance")
+    assert pm._breaker_active("finance")
 
 
 def test_import_star_funciona():
@@ -765,7 +765,7 @@ def test_api_error_cooldown_zero_desativa_circuit_breaker(
     # Simular timestamp de erro (time.time() retorna sempre False porque
     # 0 segundos passaram, logo current_time - error_time é sempre >= 0)
     pm._api_error_timestamp['test_app'] = time.time()
-    assert pm._breaker_ativo('test_app') is False
+    assert pm._breaker_active('test_app') is False
 
 
 @pytest.mark.parametrize('valor', ['', '  ', 'abc', '30s', '10.5'])
@@ -1153,8 +1153,8 @@ def test_publicar_cache_ignora_resposta_atrasada(setup_param_manager):
     recente = time.time()
     atrasada = recente - 30
 
-    pm._publicar_cache('finance', {'novo': {'value': 1}}, recente)
-    pm._publicar_cache('finance', {'velho': {'value': 0}}, atrasada)
+    pm._publish_cache('finance', {'novo': {'value': 1}}, recente)
+    pm._publish_cache('finance', {'velho': {'value': 0}}, atrasada)
 
     assert pm._cache['finance'] == {'novo': {'value': 1}}
     assert pm._cache_timestamp['finance'] == recente
@@ -1169,18 +1169,18 @@ def test_desarmar_breaker_ignora_resposta_atrasada(setup_param_manager):
 
     A requisição começa 10s antes do erro para que a ordem seja
     inequívoca: no empate exato de timestamp o desarme é o
-    comportamento desejado, ver a docstring de _desarmar_breaker.
+    comportamento desejado, ver a docstring de _disarm_breaker.
     """
     pm, *_ = setup_param_manager
 
     iniciada_em = time.time() - 10
-    pm._armar_breaker('finance')
+    pm._arm_breaker('finance')
 
-    pm._desarmar_breaker('finance', iniciada_em)
+    pm._disarm_breaker('finance', iniciada_em)
     assert 'finance' in pm._api_error_timestamp
 
     # Já uma requisição iniciada depois do erro desarma normalmente.
-    pm._desarmar_breaker('finance', time.time() + 1)
+    pm._disarm_breaker('finance', time.time() + 1)
     assert 'finance' not in pm._api_error_timestamp
 
 
@@ -1194,7 +1194,7 @@ def test_clear_cache_desarma_breaker_incondicionalmente(setup_param_manager):
     """
     pm, *_ = setup_param_manager
 
-    pm._armar_breaker('finance')
+    pm._arm_breaker('finance')
     pm.clear_cache('finance')
 
     assert 'finance' not in pm._api_error_timestamp
