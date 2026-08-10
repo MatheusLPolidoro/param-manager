@@ -172,7 +172,7 @@ class ParamManager:
                 # cai em _cache_duration, que era o valor implícito antes
                 # — com get_instance isso são 3600s, e um único 500
                 # transitório prendia o cliente em dado local por 1 hora.
-                bruto_cooldown = (
+                raw_cooldown = (
                     api_error_cooldown
                     if api_error_cooldown is not None
                     else os.getenv(
@@ -184,7 +184,7 @@ class ParamManager:
                 # _cache_duration é resolvido na leitura, não aqui, para
                 # continuar acompanhando quem ajusta _cache_duration depois.
                 self._api_error_cooldown = self._resolve_int_env(
-                    bruto_cooldown, 'API_ERROR_COOLDOWN', None
+                    raw_cooldown, 'API_ERROR_COOLDOWN', None
                 )
                 self._verify_ssl = self._resolve_verify_ssl(
                     verify_ssl, instance_name
@@ -260,10 +260,10 @@ class ParamManager:
         if getattr(self, '_db', None) is not None:
             try:
                 self._db.close()
-            except Exception as erro_close:
+            except Exception as close_error:
                 logger.error(
                     f'Falha ao fechar o banco local na limpeza: '
-                    f'{erro_close}'
+                    f'{close_error}'
                 )
 
     @staticmethod
@@ -288,14 +288,14 @@ class ParamManager:
         (e deve) passar verify_ssl=True.
         """
         if verify_ssl is None:
-            bruto = os.getenv(
+            raw = os.getenv(
                 f'{instance_name.upper()}_VERIFY_SSL',
                 os.getenv('VERIFY_SSL'),
             )
-            if bruto is None:
+            if raw is None:
                 verify_ssl = False
             else:
-                verify_ssl = bruto.strip().lower() in {
+                verify_ssl = raw.strip().lower() in {
                     '1',
                     'true',
                     'yes',
@@ -333,45 +333,45 @@ class ParamManager:
         if raw is None:
             return fallback
 
-        valor = None
-        motivo_fallback = None
-        negativo = False
+        value = None
+        fallback_reason = None
+        is_negative = False
 
         # Já é int: validar sinal
         if isinstance(raw, int):
             if raw < 0:
-                negativo = True
-                motivo_fallback = f'é negativo ({raw})'
+                is_negative = True
+                fallback_reason = f'é negativo ({raw})'
             else:
-                valor = raw
+                value = raw
         else:
             # String: strip e tentar int
             try:
-                limpo = raw.strip()
-                if not limpo:
-                    motivo_fallback = 'vazio'
+                stripped = raw.strip()
+                if not stripped:
+                    fallback_reason = 'vazio'
                 else:
-                    valor = int(limpo)
-                    if valor < 0:
-                        negativo = True
-                        motivo_fallback = f'é negativo ({valor})'
-                        valor = None
+                    value = int(stripped)
+                    if value < 0:
+                        is_negative = True
+                        fallback_reason = f'é negativo ({value})'
+                        value = None
             except (ValueError, AttributeError) as e:
-                motivo_fallback = f'inválido ({raw!r}): {e}'
+                fallback_reason = f'inválido ({raw!r}): {e}'
 
-        if motivo_fallback is not None:
-            if negativo and negative_becomes is not None:
+        if fallback_reason is not None:
+            if is_negative and negative_becomes is not None:
                 logger.warning(
-                    f'[ParamManager] {name} {motivo_fallback}; '
+                    f'[ParamManager] {name} {fallback_reason}; '
                     f'usando {negative_becomes}.'
                 )
                 return negative_becomes
             logger.warning(
-                f'[ParamManager] {name} {motivo_fallback}; usando fallback.'
+                f'[ParamManager] {name} {fallback_reason}; usando fallback.'
             )
             return fallback
 
-        return valor
+        return value
 
     def _snapshot_cache(self, app: str) -> Dict[str, Any]:
         """
@@ -456,27 +456,27 @@ class ParamManager:
         Roda durante __init__ sob _lock_singleton, depois de self._lock
         ser criado (linha 140).
         """
-        bruto = os.getenv(
+        raw = os.getenv(
             f'{self._instance_name.upper()}_PURGE_PLAINTEXT_CACHE',
             os.getenv('PARAM_MANAGER_PURGE_PLAINTEXT_CACHE', ''),
         )
-        if bruto.strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        if raw.strip().lower() not in {'1', 'true', 'yes', 'on'}:
             return
 
         try:
             with self._lock:
                 for app_name in list(self._db.tables()):
                     table = self._db.table(app_name)
-                    registro = table.get(doc_id=1)
-                    if not registro or not isinstance(
-                        registro.get('params'), dict
+                    record = table.get(doc_id=1)
+                    if not record or not isinstance(
+                        record.get('params'), dict
                     ):
                         continue
-                    limpos = self._discard_unencrypted(
-                        app_name, registro['params']
+                    cleaned = self._discard_unencrypted(
+                        app_name, record['params']
                     )
-                    if len(limpos) != len(registro['params']):
-                        table.update({'params': limpos}, doc_ids=[1])
+                    if len(cleaned) != len(record['params']):
+                        table.update({'params': cleaned}, doc_ids=[1])
                         logger.warning(
                             f'[ParamManager: {self._instance_name}] '
                             f'Valores em claro removidos do cache '
@@ -535,15 +535,15 @@ class ParamManager:
         with self._lock:
             try:
                 table = self._db.table(app_name)
-                registro = table.get(doc_id=1)
-                if not registro or not isinstance(
-                    registro.get('params'), dict
+                record = table.get(doc_id=1)
+                if not record or not isinstance(
+                    record.get('params'), dict
                 ):
                     return
-                if param_name not in registro['params']:
+                if param_name not in record['params']:
                     return
-                registro['params'].pop(param_name)
-                table.update({'params': registro['params']}, doc_ids=[1])
+                record['params'].pop(param_name)
+                table.update({'params': record['params']}, doc_ids=[1])
                 logger.info(
                     f'[ParamManager: {self._instance_name}] Parâmetro '
                     f"'{param_name}' removido do banco local de "
@@ -567,17 +567,17 @@ class ParamManager:
         if not isinstance(params, dict):
             return params
 
-        seguros = {}
+        safe_params = {}
         for key, param in params.items():
             if ParamManager._is_encrypted_param(param):
-                seguros[key] = param
+                safe_params[key] = param
                 continue
             logger.warning(
                 f'[ParamManager: {self._instance_name}] Parâmetro sensível '
                 f"'{key}' do app '{app_name}' não está cifrado; "
                 f'descartado da persistência local.'
             )
-        return seguros
+        return safe_params
 
     def clear_cache(
         self, app_name: Optional[str] = None, param_name: Optional[str] = None
@@ -728,20 +728,20 @@ class ParamManager:
                     return self._token
                 if not self._token_renewing:
                     self._token_renewing = True
-                    precisa_get = not self._token
+                    needs_get = not self._token
                     break
             time.sleep(0.001)
 
         try:
             # Rede FORA do lock
-            if precisa_get:
+            if needs_get:
                 token, refresh, expire_at = self._auth_get_token()
             else:
-                resultado = self._auth_refresh_token()
-                if resultado is None:
+                result = self._auth_refresh_token()
+                if result is None:
                     token, refresh, expire_at = self._auth_get_token()
                 else:
-                    token, refresh, expire_at = resultado
+                    token, refresh, expire_at = result
 
             # Atualiza estado sob lock (escrita atômica)
             with self._token_lock:
@@ -950,16 +950,16 @@ class ParamManager:
         if not isinstance(param, dict):
             return True
 
-        tipo = param.get('type')
+        param_type = param.get('type')
         value = param.get('value')
 
-        if tipo == 'secret':
+        if param_type == 'secret':
             return _is_envelope(value)
-        if tipo == 'user':
+        if param_type == 'user':
             return isinstance(value, dict) and _is_envelope(
                 value.get('password')
             )
-        if tipo == 'users':
+        if param_type == 'users':
             return isinstance(value, list) and all(
                 isinstance(item, dict) and _is_envelope(item.get('password'))
                 for item in value
@@ -1047,7 +1047,7 @@ class ParamManager:
                 return None
 
             salt = bytes.fromhex(value['salt'])
-            chave_custodia = PBKDF2(
+            custody_key = PBKDF2(
                 app_custody_key.encode(),
                 salt,
                 dkLen=32,
@@ -1063,8 +1063,8 @@ class ParamManager:
                 or value['master_key'].get('dado')
             )
 
-            cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
-            chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
+            cipher_cm = AES.new(custody_key, AES.MODE_GCM, cm_iv)
+            master_key = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
 
             pw_iv = bytes.fromhex(value['crypto_data']['iv'])
             pw_tag = bytes.fromhex(value['crypto_data']['tag'])
@@ -1072,10 +1072,10 @@ class ParamManager:
                 value['crypto_data'].get('data')
                 or value['crypto_data'].get('dado')
             )
-            cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
-            senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
+            cipher_pw = AES.new(master_key, AES.MODE_GCM, pw_iv)
+            password = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
 
-            return senha.decode()
+            return password.decode()
         except Exception as e:
             logger.error(
                 f'Erro ao descriptografar parâmetro secreto: {str(e)}'
