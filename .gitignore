@@ -176,3 +176,9 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 
 # Generated using ignr.py - github.com/Antrikshy/ignr.py
+
+# Resíduo de teste: uma instância criada sem local_db_path grava o TinyDB
+# no diretório corrente, e o pacote acaba ganhando uma pasta por
+# instance_name. Já entrou num commit por engano.
+param_manager/*/params_*.json
+param_manager/*/local_*.json
