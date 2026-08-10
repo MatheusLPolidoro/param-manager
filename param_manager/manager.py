@@ -32,6 +32,12 @@ from param_manager.errors import (  # noqa: F401
     ParamNaoEncontradoError,
     ParamNotFoundError,
 )
+from param_manager.local_store import (
+    ESTADO_DIRTY,
+    ESTADO_DRAFT,
+    LocalStore,
+    LocalStoreError,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +47,19 @@ logger = logging.getLogger('ParamManager')
 
 # Posicao de instance_name na assinatura posicional de __init__.
 INSTANCE_NAME_ARG_POSITION = 6
+
+# Modos de execução.
+#
+# `remote` é o default e reproduz o comportamento publicado byte a byte:
+# quem não pedir nada não percebe que este eixo existe. `local` grava
+# direto no sidecar, sem API nenhuma.
+#
+# Não existe `hybrid`: ele triplicaria a máquina de estados, e o
+# comportamento híbrido útil — lê do servidor, cai no local quando ele
+# some — JÁ É o modo remoto, via circuit breaker.
+MODO_REMOTO = 'remote'
+MODO_LOCAL = 'local'
+MODOS_VALIDOS = frozenset({MODO_REMOTO, MODO_LOCAL})
 
 
 class ParamManager:
@@ -87,6 +106,12 @@ class ParamManager:
         instance_name: str = 'default',
         verify_ssl: bool | None = None,
         api_error_cooldown: int | None = None,
+        # keyword-only e DEPOIS de todos os posicionais: __new__ deriva
+        # instance_name de args[INSTANCE_NAME_ARG_POSITION], então um
+        # parâmetro posicional novo antes daquela posição registraria a
+        # instância no slot errado do multiton.
+        *,
+        mode: str | None = None,
     ):
         # Evita re-inicialização se a instância já existe no dicionário
         if getattr(self, '_initialized', False):
@@ -209,6 +234,26 @@ class ParamManager:
                 )
                 self._db = TinyDB(self._db_path)
 
+                # Modo de execução. Mesmos três degraus de precedência de
+                # todo o resto — argumento > env prefixada > env global —,
+                # então NÃO é uma quarta fonte de configuração.
+                self._mode = self._resolve_mode(mode, instance_name)
+
+                # O sidecar só é aberto no modo local: quem roda em
+                # remoto não paga um segundo handle de TinyDB nem um
+                # arquivo a mais no disco.
+                self._local_store = (
+                    LocalStore(
+                        os.path.join(
+                            db_dir, f'local_{self._instance_name}.json'
+                        ),
+                        self._lock,
+                        self._instance_name,
+                    )
+                    if self._mode == MODO_LOCAL
+                    else None
+                )
+
                 self._cache = {}
                 self._cache_timestamp = {}
                 self._param_cache = {}
@@ -252,6 +297,58 @@ class ParamManager:
                     f'Falha ao fechar o banco local na limpeza: '
                     f'{close_error}'
                 )
+
+        # O sidecar é o segundo handle e precisa do mesmo cuidado: se a
+        # falha aconteceu depois de abri-lo, deixá-lo pendurado trava o
+        # arquivo do rascunho no Windows.
+        if getattr(self, '_local_store', None) is not None:
+            try:
+                self._local_store.close()
+            except Exception as close_error:
+                logger.error(
+                    f'Falha ao fechar o arquivo local na limpeza: '
+                    f'{close_error}'
+                )
+
+    @staticmethod
+    def _resolve_mode(mode: str | None, instance_name: str) -> str:
+        """
+        Resolve o modo na precedência padrão da lib:
+        construtor > {INSTANCE}_PARAM_MANAGER_MODE > PARAM_MANAGER_MODE.
+
+        Valor irreconhecível cai em `remote` com aviso, em vez de
+        derrubar a construção — mesma escolha de `_resolve_int_env`. E
+        cair para `remote` é a direção segura: `local` deixaria a
+        aplicação lendo rascunho sem que ninguém tivesse pedido.
+
+        **Ausência de URL NÃO liga o modo local.** Hoje, sem URL, a
+        leitura falha para o banco local e devolve `{}`; transformar
+        isso em "entra em local e passa a aceitar escrita" mudaria o
+        comportamento observável de quem roda sem URL por engano.
+        """
+        raw = mode
+        if raw is None:
+            raw = os.getenv(
+                f'{instance_name.upper()}_PARAM_MANAGER_MODE',
+                os.getenv('PARAM_MANAGER_MODE'),
+            )
+        if raw is None:
+            return MODO_REMOTO
+
+        normalizado = str(raw).strip().lower()
+        if normalizado not in MODOS_VALIDOS:
+            logger.warning(
+                f'[ParamManager: {instance_name}] Modo {raw!r} não '
+                f'reconhecido; usando {MODO_REMOTO!r}. Válidos: '
+                f'{sorted(MODOS_VALIDOS)}.'
+            )
+            return MODO_REMOTO
+        return normalizado
+
+    @property
+    def mode(self) -> str:
+        """Modo efetivo desta instância. Somente leitura."""
+        return self._mode
 
     @staticmethod
     def _resolve_verify_ssl(
@@ -781,7 +878,53 @@ class ParamManager:
             )
             return {}
 
+    def _params_locais(self, app_name: str) -> Dict[str, Any]:
+        """Parâmetros do app no sidecar, na forma `{nome: payload}`."""
+        return {
+            registro['name']: (registro.get('payload') or {})
+            for registro in self._local_store.list_params(app_name)
+        }
+
+    def list_apps(self) -> Dict[str, Any]:
+        """
+        Lista os apps. ADITIVO: não existia antes, então não quebra nada.
+
+        Em modo remoto consome `GET /parameters/apps/`, que o cliente não
+        chamava até agora — a rota está congelada no teste de contrato
+        justamente porque passou a ter consumidor.
+
+        Devolve a mesma forma de topo nos dois modos: `{'apps': [...]}`.
+        """
+        if self._mode == MODO_LOCAL:
+            return {'apps': self._local_store.list_apps()}
+
+        url = f'{self._api_base_url}/parameters/apps/'
+        res = requests.get(
+            url,
+            headers=self._auth_headers_optional(),
+            timeout=self._timeout,
+            verify=self._verify_ssl,
+        )
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao listar apps: {res.text}')
+        return res.json()
+
     def create_app(self, name: str, description: str | None = None):
+        if self._mode == MODO_LOCAL:
+            registro = self._local_store.upsert_app(name, description)
+            logger.info(
+                f'[ParamManager: {self._instance_name}] App {name!r} '
+                f'criado localmente. Ele só existirá no servidor depois '
+                f'de sincronizar.'
+            )
+            # Mesma forma de topo que o servidor devolve
+            # (AppCreatedResponse): quem lê res['app'] não muda de código
+            # ao alternar de modo.
+            return {
+                'message': f'App {name} criado localmente',
+                'app': registro,
+            }
+
         url = f'{self._api_base_url}/parameters/apps/'
 
         payload = {'name': name, 'description': description}
@@ -836,6 +979,30 @@ class ParamManager:
         payload[param_name].update({
             key: val for key, val in optional_fields.items() if val is not None
         })
+
+        if self._mode == MODO_LOCAL:
+            # `dirty` quando já foi sincronizado alguma vez, `draft`
+            # quando nunca. A diferença é o que separa "criei agora" de
+            # "editei algo que o servidor já conhece", e é ela que a
+            # sincronização usa para decidir se precisa conferir
+            # divergência antes de empurrar.
+            anterior = self._local_store.get_param(app_name, param_name)
+            estado = (
+                ESTADO_DIRTY
+                if anterior and anterior.get('base_hash')
+                else ESTADO_DRAFT
+            )
+            self._local_store.upsert_param(
+                app_name, param_name, payload[param_name], state=estado
+            )
+            # Garante o app no sidecar: upsert_params num app que ainda
+            # não existe é caminho comum no desenvolvimento local.
+            if not self._local_store.get_app(app_name):
+                self._local_store.upsert_app(app_name)
+            self.clear_cache(app_name, param_name)
+            # Mesma forma de topo que o PUT do servidor devolve.
+            return {'app': app_name, 'params': payload}
+
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
 
         def _do_request():
@@ -872,6 +1039,17 @@ class ParamManager:
         return res.json()
 
     def delete_param(self, app_name: str, param_name: str):
+        if self._mode == MODO_LOCAL:
+            if not self._local_store.delete_param(app_name, param_name):
+                raise LocalStoreError(
+                    f'Erro ao deletar parâmetro: {param_name!r} não '
+                    f'existe localmente no app {app_name!r}.'
+                )
+            self.clear_cache(app_name, param_name)
+            return {
+                'message': f'Parâmetro {param_name} removido localmente'
+            }
+
         url = (
             f'{self._api_base_url}/parameters/apps/'
             f'{app_name}/params/{param_name}'
@@ -914,6 +1092,15 @@ class ParamManager:
         return res.json()
 
     def delete_app(self, app_name: str):
+        if self._mode == MODO_LOCAL:
+            if not self._local_store.delete_app(app_name):
+                raise LocalStoreError(
+                    f'Erro ao deletar app: {app_name!r} não existe '
+                    f'localmente.'
+                )
+            self.clear_cache(app_name)
+            return {'message': f'App {app_name} removido localmente'}
+
         url = f'{self._api_base_url}/parameters/apps/{app_name}'
 
         res = requests.delete(
@@ -939,8 +1126,20 @@ class ParamManager:
 
     _decrypt_param = staticmethod(_decrypt_param)
 
-    def get_all_params(self, app_name: str) -> Dict[str, Any]:
+    # noqa PLR0911 pelo mesmo motivo de get_param: a cadeia de leitura é
+    # uma sequência de saídas antecipadas — modo, cache, breaker, API e
+    # os três ramos de erro. Achatá-la em um único return esconderia a
+    # estrutura, que é justamente o que se precisa enxergar aqui.
+    def get_all_params(self, app_name: str) -> Dict[str, Any]:  # noqa: PLR0911
         logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
+
+        if self._mode == MODO_LOCAL:
+            # Sem cache de propósito: o arquivo é local e quem está
+            # desenvolvendo acabou de editá-lo. Cachear aqui só criaria
+            # a chance de servir o valor anterior ao próprio usuário.
+            # Sem breaker também — não existe rede para falhar.
+            return _process_parameters(self._params_locais(app_name))
+
         if self._is_cache_valid(app_name):
             logger.info(f'Usando cache para o app: {app_name}')
             # Snapshot para processar fora do lock (R1).
@@ -988,6 +1187,15 @@ class ParamManager:
             f'Solicitando parâmetro {param_name} para o app: {app_name}'
         )
         param_cache_key = f'{app_name}:{param_name}'
+
+        if self._mode == MODO_LOCAL:
+            registro = self._local_store.get_param(app_name, param_name)
+            # None e não exceção: o contrato de leitura desta biblioteca
+            # é devolver valor ou None, nunca explodir na cara de quem
+            # consome. Vale igual no modo local.
+            if not registro:
+                return None
+            return _extract_value(registro.get('payload') or {})
 
         # Verifica cache específico
         if self._is_param_cache_valid(app_name, param_name):
