@@ -46,6 +46,10 @@ ROTAS_QUE_O_CLIENTE_CHAMA = {
     ('get', '/parameters/apps/{app_name}/params/{param_name}'): '200',
     ('delete', '/parameters/apps/{app_name}/params/{param_name}'): '200',
     ('delete', '/parameters/apps/{app_name}'): '200',
+    # Catálogo de tipos, consumido por refresh_type_catalog(). Sem ele o
+    # cliente cai no piso embarcado, que envelhece — então a rota sumir
+    # degrada em silêncio, que é o pior modo de falhar.
+    ('get', '/parameters/types'): '200',
 }
 
 # Chaves de topo lidas pelo cliente, por rota. As de auth ficam de fora:

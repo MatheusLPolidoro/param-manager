@@ -178,6 +178,25 @@ class LocalStore:
                     f'migrado da versão {versao} para {SCHEMA_VERSION}.'
                 )
 
+    def guardar_catalogo(self, catalogo: Dict[str, Any]) -> None:
+        """
+        Guarda o catálogo de tipos vindo do servidor, para uso offline.
+
+        Fica no `meta` do sidecar e não no cache do servidor: é
+        configuração da sessão local, não parâmetro de aplicação.
+        """
+        with self._lock:
+            self._db.table(TABELA_META).update(
+                {'type_catalog': catalogo, 'type_catalog_at': time.time()},
+                doc_ids=[1],
+            )
+
+    def catalogo(self) -> Optional[Dict[str, Any]]:
+        """Catálogo guardado, ou None se nunca se falou com o servidor."""
+        with self._lock:
+            registro = self._db.table(TABELA_META).get(doc_id=1) or {}
+        return registro.get('type_catalog')
+
     @property
     def schema_version(self) -> int:
         with self._lock:

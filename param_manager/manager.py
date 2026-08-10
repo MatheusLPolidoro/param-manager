@@ -38,6 +38,7 @@ from param_manager.local_store import (
     LocalStore,
     LocalStoreError,
 )
+from param_manager.type_catalog import CATALOGO_EMBARCADO, validar_advisory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -878,6 +879,47 @@ class ParamManager:
             )
             return {}
 
+    def _type_catalog(self) -> Dict[str, Any]:
+        """
+        Catálogo em uso: o guardado do servidor, senão o embarcado.
+
+        O embarcado envelhece de propósito — é o que sobra quando não há
+        servidor. `refresh_type_catalog()` é como se atualiza.
+        """
+        if self._local_store is not None:
+            guardado = self._local_store.catalogo()
+            if guardado:
+                return guardado
+        return CATALOGO_EMBARCADO
+
+    def refresh_type_catalog(self) -> Dict[str, Any]:
+        """
+        Busca o catálogo de tipos no servidor e o guarda para uso offline.
+
+        ADITIVO. Precisa de rede, então roda antes de perder o servidor
+        de vista — tipicamente uma vez, ao preparar a máquina para
+        trabalhar em modo local.
+
+        Sem autenticação: a rota é descrição estática do esquema, e
+        exigir token justamente aqui derrotaria o propósito.
+        """
+        url = f'{self._api_base_url}/parameters/types'
+        res = requests.get(
+            url, timeout=self._timeout, verify=self._verify_ssl
+        )
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao buscar catálogo de tipos: {res.text}')
+
+        catalogo = res.json()
+        if self._local_store is not None:
+            self._local_store.guardar_catalogo(catalogo)
+        else:
+            logger.info(
+                f'[ParamManager: {self._instance_name}] Catálogo obtido, '
+                f'mas não guardado: só o modo local mantém sidecar.'
+            )
+        return catalogo
+
     def _params_locais(self, app_name: str) -> Dict[str, Any]:
         """Parâmetros do app no sidecar, na forma `{nome: payload}`."""
         return {
@@ -981,6 +1023,22 @@ class ParamManager:
         })
 
         if self._mode == MODO_LOCAL:
+            # Conselho, não veto: quem valida de verdade é o servidor, na
+            # sincronização. Isto existe para o erro de digitação não
+            # aparecer só no fim de uma sessão inteira de trabalho
+            # offline. Avisar e gravar é deliberado — bloquear aqui
+            # significaria reimplementar a regra do servidor, que é o
+            # erro que o envelope criptográfico já custou caro.
+            for aviso in validar_advisory(
+                payload[param_name], self._type_catalog()
+            ):
+                logger.warning(
+                    f'[ParamManager: {self._instance_name}] '
+                    f'{app_name}.{param_name}: {aviso}. O parâmetro foi '
+                    f'gravado localmente; o servidor pode recusá-lo na '
+                    f'sincronização.'
+                )
+
             # `dirty` quando já foi sincronizado alguma vez, `draft`
             # quando nunca. A diferença é o que separa "criei agora" de
             # "editei algo que o servidor já conhece", e é ela que a

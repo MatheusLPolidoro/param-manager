@@ -295,6 +295,40 @@ def test_apagar_o_que_nao_existe_levanta(pm_local):
 # -------------------------------------------------------------- leitura
 
 
+def test_aviso_de_limite_nao_impede_a_gravacao(pm_local, caplog):
+    """
+    FIX-PM-17: advisory é conselho, e conselho não bloqueia.
+
+    Uma string de 40 caracteres passa do `max_length` padrão de 30 e
+    seria recusada pelo servidor. Aqui ela é gravada, com aviso — quem
+    decide é a sincronização, e o desenvolvedor fica sabendo antes de
+    chegar lá.
+    """
+    pm_local.upsert_params(
+        'app', 'nome', value='x' * 40, param_type='string'
+    )
+
+    assert 'max_length' in caplog.text
+    assert pm_local.get_param('app', 'nome') == 'x' * 40
+
+
+def test_catalogo_guardado_no_sidecar_vence_o_embarcado(pm_local):
+    """
+    FIX-PM-17: catálogo é dado, então tipo novo não exige release.
+
+    Guardado o catálogo do servidor, um tipo que o piso embarcado não
+    conhece para de gerar aviso.
+    """
+    from param_manager.type_catalog import CATALOGO_EMBARCADO
+
+    pm_local._local_store.guardar_catalogo({
+        **CATALOGO_EMBARCADO,
+        'types': [*CATALOGO_EMBARCADO['types'], 'duration'],
+    })
+
+    assert 'duration' in pm_local._type_catalog()['types']
+
+
 def test_leitura_de_app_desconhecido_nao_explode(pm_local):
     """
     FIX-PM-17: o contrato de leitura vale igual no modo local.
