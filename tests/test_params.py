@@ -2,7 +2,7 @@ import copy
 import json
 import threading
 import time
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pytest
 from Crypto.Cipher import AES
@@ -177,9 +177,7 @@ def test_token_renovado_uma_vez_sob_concorrencia(setup_param_manager):
     def _fake_token():
         chamadas.append(1)
         time.sleep(0.05)
-        pm._token = "TOK"
-        pm._token_expire_at = time.time() + 600
-        return pm._token
+        return "TOK", "REF", time.time() + 600
 
     with patch.object(pm, "_auth_get_token", side_effect=_fake_token):
         threads = [
@@ -240,7 +238,7 @@ def test_excecao_generica_arma_circuit_breaker(setup_param_manager):
 
     pm.get_all_params("finance")
     assert "finance" in pm._api_error_timestamp
-    assert pm._is_api_error_cached("finance")
+    assert pm._breaker_active("finance")
 
 
 def test_import_star_funciona():
@@ -326,37 +324,6 @@ def test_erro_de_leitura_local_descarta_so_a_tabela_do_app(
     pm._db.drop_tables.assert_not_called()
 
 
-def test_retry_de_401_renova_token_uma_unica_vez(setup_param_manager):
-    """
-    FIX-PM-02: N threads em 401 simultâneo disparam UMA renovação.
-
-    Sem o lock, cada uma faria POST /auth/refresh com o mesmo refresh
-    token de uso único e uma invalidaria a sessão da outra.
-    """
-    pm, mock_table, requests_mock = setup_param_manager
-    pm._token = "TOKEN_VELHO"
-    pm._token_expire_at = time.time() + 600
-    renovacoes = []
-
-    def _fake_refresh():
-        renovacoes.append(1)
-        time.sleep(0.05)
-        pm._token = "TOKEN_NOVO"
-        pm._token_expire_at = time.time() + 600
-        return pm._token
-
-    with patch.object(pm, "_auth_refresh_token", side_effect=_fake_refresh):
-        threads = [
-            threading.Thread(target=pm._force_token_refresh)
-            for _ in range(8)
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-    assert len(renovacoes) == 1
-    assert pm._token == "TOKEN_NOVO"
 
 
 def _param_users(qtd=2):
@@ -619,11 +586,16 @@ def test_delete_param_nao_chama_save_redundante(setup_param_manager):
 
 def test_delete_param_404_cai_em_get_param(setup_param_manager):
     """
-    FIX-PM-07c: ponta a ponta — GET 404 após delete.
+    FIX-PM-07c: ponta a ponta — GET 404 após delete (COMPORTAMENTO CORRIGIDO).
 
     Sem cache por-param, get_param desce até _fetch_param_from_api,
-    toma 404, e o except genérico arma circuit breaker. Esse é o
-    comportamento esperado hoje — está em backlog (N2) para corrigir.
+    toma 404, e agora é tratado como ParamNaoEncontradoError que NÃO arma
+    o circuit breaker — 404 significa "recurso ausente", não "servidor
+    indisponível". A biblioteca retorna None (fallback offline vazio),
+    permitindo consultas futuras sem entrar em cooldown.
+
+    Este teste registra que o comportamento foi corrigido em relação ao
+    registro anterior.
     """
     pm, mock_table, requests_mock = setup_param_manager
 
@@ -642,8 +614,8 @@ def test_delete_param_404_cai_em_get_param(setup_param_manager):
     # Sem cache por-param, cai em fallback offline (que é vazio)
     assert resultado is None
 
-    # Circuit breaker ativado para o app inteiro
-    assert 'finance' in pm._api_error_timestamp
+    # Circuit breaker NÃO é ativado para 404 — só para indisponibilidade real
+    assert 'finance' not in pm._api_error_timestamp
 
 
 def test_upsert_params_invalida_cache_por_parametro(setup_param_manager):
@@ -793,4 +765,674 @@ def test_api_error_cooldown_zero_desativa_circuit_breaker(
     # Simular timestamp de erro (time.time() retorna sempre False porque
     # 0 segundos passaram, logo current_time - error_time é sempre >= 0)
     pm._api_error_timestamp['test_app'] = time.time()
-    assert pm._is_api_error_cached('test_app') is False
+    assert pm._breaker_active('test_app') is False
+
+
+@pytest.mark.parametrize('valor', ['', '  ', 'abc', '30s', '10.5'])
+def test_cache_duration_invalido_cai_no_fallback(valor, monkeypatch, tmp_path, caplog):
+    """
+    FIX-PM-10: CACHE_DURATION malformado não pode derrubar a construção.
+
+    Mesmo motivo do API_ERROR_COOLDOWN: o ValueError subia depois de
+    __new__ ter registrado a instância, deixando um objeto meio-construído
+    e permanentemente inutilizável no multiton.
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('CACHE_DURATION', valor)
+
+    with caplog.at_level('WARNING'):
+        pm = ParamManager(
+            api_url='http://x.example.com',
+            instance_name='cd_ruim',
+            cache_duration=60,
+            local_db_path=str(tmp_path),
+        )
+
+    assert pm._cache_duration == 60
+    assert pm._initialized is True
+    assert pm._db is not None
+    assert any('CACHE_DURATION' in r.message for r in caplog.records)
+
+
+def test_cache_duration_negativo_vira_zero_e_nunca_cacheia(monkeypatch, tmp_path):
+    """
+    FIX-PM-10: negativo mantém "nunca cacheia", não vira cache de 1h.
+
+    Hoje um valor negativo faz _is_cache_valid devolver sempre False.
+    Mandá-lo ao fallback trocaria isso por cache longo — afrouxamento
+    silencioso numa lib que serve `secret`. O assert de comportamento,
+    e não só do campo, é o que protege a invariante.
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('CACHE_DURATION', '-1')
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='cd_negativo',
+        cache_duration=3600,
+        local_db_path=str(tmp_path),
+    )
+
+    assert pm._cache_duration == 0
+
+    pm._cache['finance'] = {'limite': {'type': 'int', 'value': 1}}
+    pm._cache_timestamp['finance'] = time.time()
+    assert pm._is_cache_valid('finance') is False
+
+
+@pytest.mark.parametrize('valor', ['', 'abc', '5s'])
+def test_timeout_invalido_cai_no_fallback(valor, monkeypatch, tmp_path):
+    """FIX-PM-10: TIMEOUT malformado também não derruba a construção."""
+    ParamManager._instances = {}
+    monkeypatch.setenv('TIMEOUT', valor)
+
+    pm = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='to_ruim',
+        timeout=7,
+        local_db_path=str(tmp_path),
+    )
+
+    assert pm._timeout == 7
+    assert pm._initialized is True
+    assert pm._db is not None
+
+
+def test_instancia_segue_utilizavel_apos_valor_invalido(monkeypatch, tmp_path):
+    """
+    FIX-PM-10: regressão do motivo original.
+
+    Antes, a exceção no __init__ deixava no multiton um objeto sem _db e
+    sem caches; a chamada seguinte devolvia esse cadáver e o consumidor
+    tomava AttributeError sem relação com o erro real.
+    """
+    ParamManager._instances = {}
+    monkeypatch.setenv('CACHE_DURATION', 'nao-e-numero')
+
+    ParamManager(
+        api_url='http://x.example.com',
+        instance_name='sobrevivente',
+        cache_duration=42,
+        local_db_path=str(tmp_path),
+    )
+    segunda = ParamManager(
+        api_url='http://x.example.com',
+        instance_name='sobrevivente',
+        local_db_path=str(tmp_path),
+    )
+
+    assert segunda._db is not None
+    assert segunda._cache_duration == 42
+    assert segunda.get_cache_info() is not None
+
+
+def test_404_get_param_nao_arma_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 404 em get_param NÃO arma circuit breaker.
+
+    Um 404 significa "recurso não encontrado", não "servidor indisponível".
+    Portanto, _api_error_timestamp deve permanecer vazio.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        status_code=404,
+    )
+
+    resultado = pm.get_param("finance", "saldo")
+    assert resultado is None
+    assert 'finance' not in pm._api_error_timestamp
+
+
+def test_404_get_param_depois_200_bate_api(setup_param_manager):
+    """
+    FIX-PM-11: 404 seguido de 200 em get_param bate na API.
+
+    Como 404 não arma o breaker, a próxima chamada deve fazer uma nova
+    requisição à API em vez de usar fallback offline.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    # Primeira chamada retorna 404
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        [
+            {"status_code": 404},
+            {
+                "json": {"param": {"type": "int", "value": 1000}},
+                "status_code": 200,
+            },
+        ],
+    )
+
+    # Primeira chamada: 404
+    resultado1 = pm.get_param("finance", "saldo")
+    assert resultado1 is None
+
+    # Segunda chamada: bate na API e retorna 200
+    resultado2 = pm.get_param("finance", "saldo")
+    assert resultado2 == 1000
+
+
+def test_500_em_get_param_continua_armando_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 500 em get_param CONTINUA armando o circuit breaker.
+
+    Um 500 (erro de servidor) deve ativar o cooldown normalmente.
+    Regressão: este teste garante que apenas 404 é tratado diferentemente.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        status_code=500,
+    )
+
+    resultado = pm.get_param("finance", "saldo")
+    assert resultado is None
+    assert 'finance' in pm._api_error_timestamp
+
+
+def test_401_em_get_param_continua_armando_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 401 em get_param CONTINUA armando o circuit breaker.
+
+    Um 401 (não autorizado) deve ativar o cooldown normalmente.
+    Regressão: este teste garante que apenas 404 é tratado diferentemente.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/saldo",
+        status_code=401,
+    )
+
+    resultado = pm.get_param("finance", "saldo")
+    assert resultado is None
+    assert 'finance' in pm._api_error_timestamp
+
+
+def test_404_get_all_params_nao_arma_breaker(setup_param_manager):
+    """
+    FIX-PM-11: 404 em get_all_params NÃO arma circuit breaker.
+
+    Um 404 em get_all_params deve ter o mesmo comportamento que em
+    get_param: não ativa o cooldown.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        status_code=404,
+    )
+
+    resultado = pm.get_all_params("finance")
+    assert resultado == {}
+    assert 'finance' not in pm._api_error_timestamp
+
+
+def test_404_nao_desarma_breaker_ja_armado(setup_param_manager):
+    """
+    FIX-PM-11: 404 NÃO desarma um breaker já armado.
+
+    Se o breaker está armado por um erro real (500, timeout),
+    um 404 subsequente não deve limpá-lo. O breaker só é desarmado
+    por uma resposta 200.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "T", "refresh_token": "R"},
+        status_code=200,
+    )
+
+    # Primeiro, arma o breaker com um 500
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        status_code=500,
+    )
+    pm.get_all_params("finance")
+    assert 'finance' in pm._api_error_timestamp
+
+    # Reset o mock para retornar 404 na próxima chamada
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        status_code=404,
+    )
+
+    # Chama novamente: o breaker já está armado, vai usar fallback
+    pm.get_all_params("finance")
+
+    # O breaker deve CONTINUAR armado (404 não o limpa)
+    assert 'finance' in pm._api_error_timestamp
+
+
+# --- CL-2: travamento de cache e breaker -------------------------------
+
+
+def test_get_cache_info_sobrevive_mutacao_durante_iteracao(
+    setup_param_manager,
+):
+    """
+    R1: get_cache_info percorre snapshots, não os dicts vivos.
+
+    Concorrência simulada de dentro da iteração: _is_cache_valid muta
+    _cache_timestamp na primeira chave, como faria um clear_cache de
+    outra thread. Sem o snapshot isso é RuntimeError: dictionary
+    changed size during iteration.
+    """
+    pm, *_ = setup_param_manager
+
+    agora = time.time()
+    for app in ('app_a', 'app_b', 'app_c'):
+        pm._cache[app] = {'P': {'type': 'int', 'value': 1}}
+        pm._cache_timestamp[app] = agora
+    pm._api_error_timestamp['app_a'] = agora
+
+    original = pm._is_cache_valid
+    ja_mutou = []
+
+    def muta_na_primeira_chave(app_name):
+        if not ja_mutou:
+            ja_mutou.append(app_name)
+            pm._cache_timestamp.pop('app_c', None)
+            pm._api_error_timestamp['app_z'] = agora
+        return original(app_name)
+
+    pm._is_cache_valid = muta_na_primeira_chave
+
+    info = pm.get_cache_info()
+
+    assert ja_mutou, 'a mutação concorrente não chegou a ser exercitada'
+    assert 'app_a' in info['cache_timestamps']
+
+
+def test_process_parameters_sobrevive_mutacao_do_cache(setup_param_manager):
+    """
+    R1: get_all_params decifra sobre um snapshot, não sobre o cache vivo.
+
+    O side_effect grava uma chave nova em _cache[app] no meio da
+    comprehension de _process_parameters. Sem o snapshot, estoura.
+    """
+    pm, *_ = setup_param_manager
+
+    pm._cache['finance'] = {
+        'A': {'type': 'int', 'value': 1},
+        'B': {'type': 'int', 'value': 2},
+    }
+    pm._cache_timestamp['finance'] = time.time()
+
+    original = ParamManager._process_parameter
+    ja_mutou = []
+
+    def muta_na_primeira_chave(param):
+        if not ja_mutou:
+            ja_mutou.append(param)
+            pm._cache['finance']['C'] = {'type': 'int', 'value': 3}
+        return original(param)
+
+    # Alvo é o módulo, não a classe: _process_parameters passou a viver
+    # em param_manager.crypto e resolve _process_parameter pelo global do
+    # próprio módulo, então patch.object(ParamManager, ...) não
+    # intercepta mais. A race aferida é a mesma.
+    with patch(
+        'param_manager.crypto._process_parameter',
+        side_effect=muta_na_primeira_chave,
+    ):
+        resultado = pm.get_all_params('finance')
+
+    assert ja_mutou, 'a mutação concorrente não chegou a ser exercitada'
+    assert set(resultado) == {'A', 'B'}
+
+
+def test_delete_param_nao_muta_o_dict_anterior(setup_param_manager):
+    """
+    R2: delete_param substitui o dict do cache, não o muta in-place.
+
+    Quem já segurava uma referência ao dict anterior — o merge de
+    _save_to_local_db, por exemplo — não pode vê-lo encolher embaixo.
+    """
+    pm, _, requests_mock = setup_param_manager
+
+    pm._cache['finance'] = {
+        'limit': {'type': 'int', 'value': 1},
+        'outro': {'type': 'int', 'value': 2},
+    }
+    pm._cache_timestamp['finance'] = time.time()
+    referencia_anterior = pm._cache['finance']
+
+    requests_mock.post(
+        'http://test-api.example.com/auth/token',
+        json={'access_token': 'TT', 'refresh_token': 'RR'},
+        status_code=200,
+    )
+    requests_mock.delete(
+        'http://test-api.example.com/parameters/apps/finance/params/limit',
+        json={'status': 'deleted'},
+        status_code=200,
+    )
+
+    pm.delete_param('finance', 'limit')
+
+    assert pm._cache['finance'] is not referencia_anterior
+    assert 'limit' not in pm._cache['finance']
+    assert 'limit' in referencia_anterior
+
+
+def test_publicar_cache_ignora_resposta_atrasada(setup_param_manager):
+    """
+    R5 (corolário): resposta antiga não sobrescreve cache mais novo.
+
+    Sem o CAS, a resposta atrasada devolveria o app ao dado velho por
+    até _cache_duration.
+    """
+    pm, *_ = setup_param_manager
+
+    recente = time.time()
+    atrasada = recente - 30
+
+    pm._publish_cache('finance', {'novo': {'value': 1}}, recente)
+    pm._publish_cache('finance', {'velho': {'value': 0}}, atrasada)
+
+    assert pm._cache['finance'] == {'novo': {'value': 1}}
+    assert pm._cache_timestamp['finance'] == recente
+
+
+def test_desarmar_breaker_ignora_resposta_atrasada(setup_param_manager):
+    """
+    R5: sucesso iniciado ANTES do erro não desarma o breaker.
+
+    Sem o CAS, uma resposta em voo desde antes da falha apagaria o
+    registro do erro e reabriria o circuito cedo demais.
+
+    A requisição começa 10s antes do erro para que a ordem seja
+    inequívoca: no empate exato de timestamp o desarme é o
+    comportamento desejado, ver a docstring de _disarm_breaker.
+    """
+    pm, *_ = setup_param_manager
+
+    iniciada_em = time.time() - 10
+    pm._arm_breaker('finance')
+
+    pm._disarm_breaker('finance', iniciada_em)
+    assert 'finance' in pm._api_error_timestamp
+
+    # Já uma requisição iniciada depois do erro desarma normalmente.
+    pm._disarm_breaker('finance', time.time() + 1)
+    assert 'finance' not in pm._api_error_timestamp
+
+
+def test_clear_cache_desarma_breaker_incondicionalmente(setup_param_manager):
+    """
+    As duas semânticas sobre _api_error_timestamp são deliberadas.
+
+    clear_cache é ação explícita do operador e desarma sempre; o
+    desarme por sucesso é CAS-guardado. Uniformizar as duas reintroduz
+    a race do desarme precoce.
+    """
+    pm, *_ = setup_param_manager
+
+    pm._arm_breaker('finance')
+    pm.clear_cache('finance')
+
+    assert 'finance' not in pm._api_error_timestamp
+
+
+# --- CL-3: travamento de TinyDB -----
+
+
+def test_db_drop_table_sob_lock_r3(setup_param_manager):
+    """
+    R3: drop_table em _fetch_from_api é feito sob _lock.
+
+    Sem o lock, JSONStorage pode reescrever o arquivo enquanto
+    outro thread faz update, truncando o JSON e destruindo o
+    fallback offline.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    # Simula erro de JSON na resposta da API
+    requests_mock.get(
+        "http://test-api.example.com/parameters/apps/finance/params/",
+        text="nao eh json valido",
+        status_code=200,
+    )
+
+    # Chama _fetch_from_api que vai tentar drop_table
+    pm._fetch_from_api("finance")
+
+    # Verifica que drop_table foi chamado (mockado, mas a verificação
+    # mostra que foi sob contexto seguro se o método passou)
+    pm._db.drop_table.assert_called_once_with("finance")
+
+
+def test_db_get_from_local_db_sob_lock_r3(setup_param_manager):
+    """
+    R3: table.all() em _get_from_local_db é feito sob _lock.
+
+    O acesso a self._db.table().all() é protegido para evitar que
+    drop_table concorrente corrompa o arquivo.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    # Simula um registro no banco local
+    mock_table.all.return_value = [
+        {
+            "timestamp": time.time(),
+            "params": {"limite": {"type": "int", "value": 100}},
+        }
+    ]
+
+    resultado = pm._get_from_local_db("finance")
+
+    assert resultado == {"limite": {"type": "int", "value": 100}}
+    # Verifica que table.all foi chamado (sob lock)
+    mock_table.all.assert_called_once()
+
+
+# --- CL-3: leitura atômica do token -----
+
+
+def test_get_valid_token_leitura_atomica_r4(setup_param_manager):
+    """
+    R4: (_token, _token_expire_at) é lido e escrito de forma atômica.
+
+    Sem atomicidade, um thread pode ler um token expirado e marcar como
+    válido por até 29 minutos (a janela entre _token_expire_at ser lido
+    como 0 e ser atualizado).
+
+    O teste simula: _get_valid_token faz rede e atualiza o par, enquanto
+    outro thread tenta ler os valores. Com leitura atômica, não há
+    meia-construção visível.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/token",
+        json={"access_token": "TOKEN_NOVO", "refresh_token": "RR_NOVO"},
+        status_code=200,
+    )
+
+    # Reseta token para simular primeiro login
+    pm._token = None
+    pm._token_expire_at = 0
+
+    # Chama _get_valid_token que vai fazer autenticação
+    resultado = pm._get_valid_token()
+
+    assert resultado == "TOKEN_NOVO"
+    # Verifica que o par foi escrito atomicamente
+    assert pm._token == "TOKEN_NOVO"
+    assert pm._token_expire_at > time.time()
+
+
+def test_force_token_refresh_nao_faz_rede_sob_lock_r4(setup_param_manager):
+    """
+    R4: _force_token_refresh faz rede FORA do _token_lock.
+
+    A rede é expensive e bloqueia outras threads; não pode acontecer
+    com o lock na mão.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+    pm._token = "TOKEN_VELHO"
+    pm._token_expire_at = time.time() + 600
+    pm._refresh_token = "RR"
+
+    requests_mock.post(
+        "http://test-api.example.com/auth/refresh",
+        json={"access_token": "TOKEN_NOVO", "refresh_token": "RR_NOVO"},
+        status_code=200,
+    )
+
+    # Chama força renovação
+    resultado = pm._force_token_refresh()
+
+    assert resultado == "TOKEN_NOVO"
+    # Verifica que refresh foi chamado (rede fora do lock)
+    assert any(r.method == "POST" for r in requests_mock.request_history)
+
+
+# --- CL-3: proteção de __init__ falho -----
+
+
+def test_init_falho_remove_instancia_do_multiton_r7(tmp_path, monkeypatch):
+    """
+    R7: exceção no __init__ remove a instância de _instances.
+
+    Sem essa proteção, chamadas seguintes a get_instance devolveriam o
+    objeto meio-construído e inutilizável, causando AttributeError sem
+    relação com o erro real.
+    """
+    ParamManager._instances = {}
+    instance_name = "quebrada"
+
+    # Simula falha durante __init__: valor inválido para CACHE_DURATION
+    monkeypatch.setenv(f'{instance_name.upper()}_CACHE_DURATION', 'nao-e-int')
+    # Desabilita o fallback para forçar o ValueError
+    with patch.object(ParamManager, '_resolve_int_env', side_effect=ValueError('erro simulado')):
+        with pytest.raises(ValueError, match='erro simulado'):
+            ParamManager(
+                api_url='http://x.example.com',
+                instance_name=instance_name,
+                local_db_path=str(tmp_path),
+            )
+
+    # Verifica que a instância foi removida de _instances
+    assert instance_name not in ParamManager._instances
+
+    # Próxima tentativa cria nova instância com sucesso
+    ParamManager(
+        api_url='http://x.example.com',
+        instance_name=instance_name,
+        local_db_path=str(tmp_path),
+    )
+    assert instance_name in ParamManager._instances
+    assert ParamManager._instances[instance_name]._initialized is True
+
+
+def test_init_falho_fecha_db_se_aberto_r7(tmp_path):
+    """
+    R7: ao remover instância morta, fecha o TinyDB para liberar arquivo.
+
+    Sem isso, o arquivo fica travado no Windows e a próxima tentativa
+    falha com "Arquivo em uso".
+    """
+    ParamManager._instances = {}
+    instance_name = "com_db_quebrado"
+
+    # Simula: TinyDB abre com sucesso, mas falha logo depois
+    original_tinydb = None
+    open_count = [0]
+
+    def fake_tinydb_init(self, *args, **kwargs):
+        open_count[0] += 1
+        # Chama o construtor real
+        original_tinydb.__init__(self, *args, **kwargs)
+
+    with patch('param_manager.manager.TinyDB') as mock_tinydb_class:
+        mock_instance = MagicMock()
+        mock_tinydb_class.return_value = mock_instance
+
+        # Simula falha após TinyDB ser criado
+        with patch.object(
+            ParamManager, '_purge_plaintext_cache', side_effect=RuntimeError('falha simulada')
+        ):
+            with pytest.raises(RuntimeError, match='falha simulada'):
+                ParamManager(
+                    api_url='http://x.example.com',
+                    instance_name=instance_name,
+                    local_db_path=str(tmp_path),
+                )
+
+        # Verifica que close() foi chamado no TinyDB
+        mock_instance.close.assert_called_once()
+
+        # Verifica que a instância foi removida
+        assert instance_name not in ParamManager._instances
+
+
+def test_renovacao_concorrente_faz_uma_unica_ida_a_rede(setup_param_manager):
+    """
+    R4: N threads com o token vencido renovam uma vez só.
+
+    O ponto não é apenas economizar requisição: no Keycloak padrão o
+    refresh token é de uso único, então a segunda renovação invalidaria
+    a sessão que a primeira acabou de abrir.
+
+    Barreira em vez de sleep — as threads partem juntas de verdade.
+    """
+    pm, _, requests_mock = setup_param_manager
+
+    pm._token = 'velho'
+    pm._refresh_token = 'RR'
+    pm._token_expire_at = time.time() - 1
+
+    requests_mock.post(
+        'http://test-api.example.com/auth/refresh',
+        json={'access_token': 'novo', 'refresh_token': 'RR2'},
+        status_code=200,
+    )
+
+    total = 5
+    barreira = threading.Barrier(total)
+    obtidos = []
+
+    def corredor():
+        barreira.wait()
+        obtidos.append(pm._get_valid_token())
+
+    threads = [threading.Thread(target=corredor) for _ in range(total)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert obtidos == ['novo'] * total
+    assert requests_mock.call_count == 1

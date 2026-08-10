@@ -1,0 +1,1 @@
+Buscar um parâmetro ou aplicação inexistentes (404) deixa de ativar o circuit breaker, permitindo novas tentativas sem entrar em modo offline. Apenas erros de indisponibilidade real (5xx, timeout, conexão) ativam o mecanismo de fallback.

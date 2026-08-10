@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import os
@@ -9,15 +8,45 @@ import threading
 import time
 from datetime import datetime, timedelta
 from http import HTTPStatus
-from typing import Any, ClassVar, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional, Tuple
 
 import requests
-from Crypto.Cipher import AES
-from Crypto.Hash import SHA256
-from Crypto.Protocol.KDF import PBKDF2
 from dotenv import find_dotenv, load_dotenv
 from requests.exceptions import ConnectionError, Timeout
 from tinydb import TinyDB
+
+# Reexportados: `from param_manager.manager import ParamNaoEncontradoError`
+# é o caminho que o __init__ e código de terceiros usam desde antes da
+# decomposição. Mover a definição sem reexportar seria quebra.
+from param_manager.crypto import (  # noqa: F401
+    ENVELOPE_KEYS,
+    SENSITIVE_TYPES,
+    _decrypt_param,
+    _extract_value,
+    _is_encrypted_param,
+    _is_envelope,
+    _process_parameter,
+    _process_parameters,
+)
+from param_manager.errors import (  # noqa: F401
+    ParamNaoEncontradoError,
+    ParamNotFoundError,
+)
+from param_manager.local_store import (
+    ESTADO_DIRTY,
+    ESTADO_DRAFT,
+    ESTADO_REJECTED,
+    ESTADO_SYNCED,
+    LocalStore,
+    LocalStoreError,
+    payload_hash,
+)
+from param_manager.sync import (
+    ACAO_CONFLITO,
+    itens_aplicaveis,
+    montar_plano,
+)
+from param_manager.type_catalog import CATALOGO_EMBARCADO, validar_advisory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,22 +54,35 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ParamManager')
 
-# Tipos cujo valor trafega cifrado entre a API e esta biblioteca.
-SENSITIVE_TYPES = frozenset({'secret', 'user', 'users'})
-
-# Chaves obrigatórias do envelope criptográfico. Contrato congelado com o
-# servidor — ver a documentação do fast-param-manager antes de alterar.
-ENVELOPE_KEYS = ('salt', 'master_key', 'crypto_data')
-
 # Posicao de instance_name na assinatura posicional de __init__.
 INSTANCE_NAME_ARG_POSITION = 6
 
+# Modos de execução.
+#
+# `remote` é o default e reproduz o comportamento publicado byte a byte:
+# quem não pedir nada não percebe que este eixo existe. `local` grava
+# direto no sidecar, sem API nenhuma.
+#
+# Não existe `hybrid`: ele triplicaria a máquina de estados, e o
+# comportamento híbrido útil — lê do servidor, cai no local quando ele
+# some — JÁ É o modo remoto, via circuit breaker.
+MODO_REMOTO = 'remote'
+MODO_LOCAL = 'local'
+MODOS_VALIDOS = frozenset({MODO_REMOTO, MODO_LOCAL})
 
-def _is_envelope(value: Any) -> bool:
-    """Diz se o valor é um envelope criptográfico íntegro."""
-    return isinstance(value, dict) and all(
-        key in value for key in ENVELOPE_KEYS
-    )
+
+class _SemCache:
+    """Sentinela de ausência no cache. Ver `_snapshot_param_cache`."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return '<SEM_CACHE>'
+
+
+# `None` não serve como marcador de ausência: é valor cacheável legítimo,
+# porque o servidor pode responder `{'param': null}`.
+SEM_CACHE = _SemCache()
 
 
 class ParamManager:
@@ -72,7 +114,11 @@ class ParamManager:
                 )
             return cls._instances[instance_name]
 
-    def __init__(  # noqa: PLR0913, PLR0917
+    # PLR0915: o corpo passou de 50 sentenças ao ser envolvido no
+    # try/except que descarta a instância meio-construída (R7). Quebrar
+    # a resolução de configuração em outro método só moveria o problema
+    # e deixaria dois lugares para procurar.
+    def __init__(  # noqa: PLR0913, PLR0917, PLR0915
         self,
         api_url: str | None = None,
         cache_duration: int = 300,
@@ -83,6 +129,12 @@ class ParamManager:
         instance_name: str = 'default',
         verify_ssl: bool | None = None,
         api_error_cooldown: int | None = None,
+        # keyword-only e DEPOIS de todos os posicionais: __new__ deriva
+        # instance_name de args[INSTANCE_NAME_ARG_POSITION], então um
+        # parâmetro posicional novo antes daquela posição registraria a
+        # instância no slot errado do multiton.
+        *,
+        mode: str | None = None,
     ):
         # Evita re-inicialização se a instância já existe no dicionário
         if getattr(self, '_initialized', False):
@@ -97,109 +149,229 @@ class ParamManager:
             if getattr(self, '_initialized', False):
                 return
 
-            self._instance_name = instance_name
+            try:
+                self._instance_name = instance_name
 
-            # Carregamento de ambiente
-            if getattr(sys, 'frozen', False):
-                base_dir = sys._MEIPASS
-                dotenv_path = os.path.join(base_dir, '.env')
-            else:
-                base_dir = None
-                dotenv_path = find_dotenv()
+                # Carregamento de ambiente
+                if getattr(sys, 'frozen', False):
+                    base_dir = sys._MEIPASS
+                    dotenv_path = os.path.join(base_dir, '.env')
+                else:
+                    base_dir = None
+                    dotenv_path = find_dotenv()
 
-            load_dotenv(dotenv_path=dotenv_path)
+                load_dotenv(dotenv_path=dotenv_path)
 
-            # 4. Prioridade de Configuração (Parâmetros de código > .env)
-            self._cache_duration = int(
-                os.getenv(
-                    f'{instance_name.upper()}_CACHE_DURATION',
-                    os.getenv('CACHE_DURATION', cache_duration),
+                # 4. Prioridade de Configuração (Parâmetros de código > .env)
+                # O argumento do construtor entra como fallback: sem env
+                # var, a resolução é a mesma de antes. Negativo vira 0, e
+                # não o fallback — ver _resolve_int_env.
+                self._cache_duration = self._resolve_int_env(
+                    os.getenv(
+                        f'{instance_name.upper()}_CACHE_DURATION',
+                        os.getenv('CACHE_DURATION'),
+                    ),
+                    'CACHE_DURATION',
+                    cache_duration,
+                    negative_becomes=0,
                 )
-            )
-            self._username = username or os.getenv(
-                f'{instance_name.upper()}_PARAMS_USERNAME',
-                os.getenv('PARAMS_USERNAME'),
-            )
-            self._password = password or os.getenv(
-                f'{instance_name.upper()}_PARAMS_PASSWORD',
-                os.getenv('PARAMS_PASSWORD'),
-            )
-
-            self._lock = threading.Lock()
-            # Lock dedicado ao token: reaproveitar self._lock causaria
-            # reentrância com _save_to_local_db.
-            self._token_lock = threading.Lock()
-            self._token = None
-            self._refresh_token = None
-            self._token_expire_at = 0
-            self._timeout = int(os.getenv('TIMEOUT', timeout))
-            # Janela do circuit breaker. Sem argumento e sem env var
-            # cai em _cache_duration, que era o valor implícito antes
-            # — com get_instance isso são 3600s, e um único 500
-            # transitório prendia o cliente em dado local por 1 hora.
-            bruto_cooldown = (
-                api_error_cooldown
-                if api_error_cooldown is not None
-                else os.getenv(
-                    f'{instance_name.upper()}_API_ERROR_COOLDOWN',
-                    os.getenv('API_ERROR_COOLDOWN'),
+                self._username = username or os.getenv(
+                    f'{instance_name.upper()}_PARAMS_USERNAME',
+                    os.getenv('PARAMS_USERNAME'),
                 )
-            )
-            # None quando não configurado: o fallback para
-            # _cache_duration é resolvido na leitura, não aqui, para
-            # continuar acompanhando quem ajusta _cache_duration depois.
-            self._api_error_cooldown = self._resolve_int_env(
-                bruto_cooldown, 'API_ERROR_COOLDOWN', None
-            )
-            self._verify_ssl = self._resolve_verify_ssl(
-                verify_ssl, instance_name
-            )
-            self._api_base_url = (
-                api_url
-                or os.getenv(f'API_{instance_name.upper()}_URL')
-                or os.getenv('API_PARAMS_URL', '')
-                or os.getenv('API_URL', '')
-            )
-
-            # 2. Isolamento do Armazenamento (TinyDB por instância)
-            env_db_path = os.getenv('LOCAL_DB_PATH')
-            if local_db_path:
-                current_dir = local_db_path
-            elif base_dir:
-                current_dir = base_dir
-            elif env_db_path:
-                current_dir = env_db_path
-            else:
-                current_dir = (
-                    os.path.dirname(dotenv_path)
-                    if dotenv_path
-                    else os.getcwd()
+                self._password = password or os.getenv(
+                    f'{instance_name.upper()}_PARAMS_PASSWORD',
+                    os.getenv('PARAMS_PASSWORD'),
                 )
 
-            db_dir = os.path.join(
-                current_dir, 'param_manager', self._instance_name
+                self._lock = threading.Lock()
+                # Lock dedicado ao token: reaproveitar self._lock causaria
+                # reentrância com _save_to_local_db.
+                self._token_lock = threading.Lock()
+                # Lock para os dicts de cache e breaker (CL-2): protege
+                # _cache, _cache_timestamp, _param_cache,
+                # _param_cache_timestamp, _api_error_timestamp.
+                self._state_lock = threading.Lock()
+                self._token = None
+                self._refresh_token = None
+                self._token_expire_at = 0
+                # Quem está com a vez de renovar o token. Ver
+                # _sync_get_new_token.
+                self._token_renewing = False
+                # Negativo aqui já é caminho quebrado (o requests estoura),
+                # então cai no fallback, ao contrário de CACHE_DURATION.
+                self._timeout = self._resolve_int_env(
+                    os.getenv('TIMEOUT'), 'TIMEOUT', timeout
+                )
+                # Janela do circuit breaker. Sem argumento e sem env var
+                # cai em _cache_duration, que era o valor implícito antes
+                # — com get_instance isso são 3600s, e um único 500
+                # transitório prendia o cliente em dado local por 1 hora.
+                raw_cooldown = (
+                    api_error_cooldown
+                    if api_error_cooldown is not None
+                    else os.getenv(
+                        f'{instance_name.upper()}_API_ERROR_COOLDOWN',
+                        os.getenv('API_ERROR_COOLDOWN'),
+                    )
+                )
+                # None quando não configurado: o fallback para
+                # _cache_duration é resolvido na leitura, não aqui, para
+                # continuar acompanhando quem ajusta _cache_duration depois.
+                self._api_error_cooldown = self._resolve_int_env(
+                    raw_cooldown, 'API_ERROR_COOLDOWN', None
+                )
+                self._verify_ssl = self._resolve_verify_ssl(
+                    verify_ssl, instance_name
+                )
+                self._api_base_url = (
+                    api_url
+                    or os.getenv(f'API_{instance_name.upper()}_URL')
+                    or os.getenv('API_PARAMS_URL', '')
+                    or os.getenv('API_URL', '')
+                )
+
+                # 2. Isolamento do Armazenamento (TinyDB por instância)
+                env_db_path = os.getenv('LOCAL_DB_PATH')
+                if local_db_path:
+                    current_dir = local_db_path
+                elif base_dir:
+                    current_dir = base_dir
+                elif env_db_path:
+                    current_dir = env_db_path
+                else:
+                    current_dir = (
+                        os.path.dirname(dotenv_path)
+                        if dotenv_path
+                        else os.getcwd()
+                    )
+
+                db_dir = os.path.join(
+                    current_dir, 'param_manager', self._instance_name
+                )
+                os.makedirs(db_dir, exist_ok=True)
+
+                # Nome do arquivo isolado por instância
+                self._db_path = os.path.join(
+                    db_dir, f'params_{self._instance_name}.json'
+                )
+                self._db = TinyDB(self._db_path)
+
+                # Modo de execução. Mesmos três degraus de precedência de
+                # todo o resto — argumento > env prefixada > env global —,
+                # então NÃO é uma quarta fonte de configuração.
+                self._mode = self._resolve_mode(mode, instance_name)
+
+                # O sidecar só é aberto no modo local: quem roda em
+                # remoto não paga um segundo handle de TinyDB nem um
+                # arquivo a mais no disco.
+                self._local_store = (
+                    LocalStore(
+                        os.path.join(
+                            db_dir, f'local_{self._instance_name}.json'
+                        ),
+                        self._lock,
+                        self._instance_name,
+                    )
+                    if self._mode == MODO_LOCAL
+                    else None
+                )
+
+                self._cache = {}
+                self._cache_timestamp = {}
+                self._param_cache = {}
+                self._param_cache_timestamp = {}
+                self._api_error_timestamp = {}
+
+                self._purge_plaintext_cache()
+
+                self._initialized = True
+                logger.info(
+                    f'[ParamManager: {self._instance_name}] '
+                    f'Inicializado na API: {self._api_base_url}'
+                )
+            except Exception as e:
+                self._discard_failed_instance(instance_name, e)
+                raise
+
+    def _discard_failed_instance(self, instance_name, error):
+        """
+        Tira do multiton a instância que não terminou de nascer.
+
+        Sem isto, o objeto meio-construído fica em `_instances` e toda
+        chamada seguinte a `get_instance` devolve o mesmo objeto
+        quebrado — o processo não se recupera sozinho.
+
+        Fechar o TinyDB já aberto é parte da limpeza, não detalhe:
+        deixá-lo aberto troca a instância morta por um arquivo travado
+        no Windows, que sobrevive às novas tentativas e é pior.
+        """
+        logger.error(
+            f'[ParamManager: {instance_name}] '
+            f'Falha na inicialização: {error}'
+        )
+        self.__class__._instances.pop(instance_name, None)
+
+        if getattr(self, '_db', None) is not None:
+            try:
+                self._db.close()
+            except Exception as close_error:
+                logger.error(
+                    f'Falha ao fechar o banco local na limpeza: '
+                    f'{close_error}'
+                )
+
+        # O sidecar é o segundo handle e precisa do mesmo cuidado: se a
+        # falha aconteceu depois de abri-lo, deixá-lo pendurado trava o
+        # arquivo do rascunho no Windows.
+        if getattr(self, '_local_store', None) is not None:
+            try:
+                self._local_store.close()
+            except Exception as close_error:
+                logger.error(
+                    f'Falha ao fechar o arquivo local na limpeza: '
+                    f'{close_error}'
+                )
+
+    @staticmethod
+    def _resolve_mode(mode: str | None, instance_name: str) -> str:
+        """
+        Resolve o modo na precedência padrão da lib:
+        construtor > {INSTANCE}_PARAM_MANAGER_MODE > PARAM_MANAGER_MODE.
+
+        Valor irreconhecível cai em `remote` com aviso, em vez de
+        derrubar a construção — mesma escolha de `_resolve_int_env`. E
+        cair para `remote` é a direção segura: `local` deixaria a
+        aplicação lendo rascunho sem que ninguém tivesse pedido.
+
+        **Ausência de URL NÃO liga o modo local.** Hoje, sem URL, a
+        leitura falha para o banco local e devolve `{}`; transformar
+        isso em "entra em local e passa a aceitar escrita" mudaria o
+        comportamento observável de quem roda sem URL por engano.
+        """
+        raw = mode
+        if raw is None:
+            raw = os.getenv(
+                f'{instance_name.upper()}_PARAM_MANAGER_MODE',
+                os.getenv('PARAM_MANAGER_MODE'),
             )
-            os.makedirs(db_dir, exist_ok=True)
+        if raw is None:
+            return MODO_REMOTO
 
-            # Nome do arquivo isolado por instância
-            self._db_path = os.path.join(
-                db_dir, f'params_{self._instance_name}.json'
+        normalizado = str(raw).strip().lower()
+        if normalizado not in MODOS_VALIDOS:
+            logger.warning(
+                f'[ParamManager: {instance_name}] Modo {raw!r} não '
+                f'reconhecido; usando {MODO_REMOTO!r}. Válidos: '
+                f'{sorted(MODOS_VALIDOS)}.'
             )
-            self._db = TinyDB(self._db_path)
+            return MODO_REMOTO
+        return normalizado
 
-            self._cache = {}
-            self._cache_timestamp = {}
-            self._param_cache = {}
-            self._param_cache_timestamp = {}
-            self._api_error_timestamp = {}
-
-            self._purge_plaintext_cache()
-
-            self._initialized = True
-            logger.info(
-                f'[ParamManager: {self._instance_name}] Inicializado na API:'
-                f' {self._api_base_url}'
-            )
+    @property
+    def mode(self) -> str:
+        """Modo efetivo desta instância. Somente leitura."""
+        return self._mode
 
     @staticmethod
     def _resolve_verify_ssl(
@@ -223,14 +395,14 @@ class ParamManager:
         (e deve) passar verify_ssl=True.
         """
         if verify_ssl is None:
-            bruto = os.getenv(
+            raw = os.getenv(
                 f'{instance_name.upper()}_VERIFY_SSL',
                 os.getenv('VERIFY_SSL'),
             )
-            if bruto is None:
+            if raw is None:
                 verify_ssl = False
             else:
-                verify_ssl = bruto.strip().lower() in {
+                verify_ssl = raw.strip().lower() in {
                     '1',
                     'true',
                     'yes',
@@ -239,8 +411,11 @@ class ParamManager:
         return verify_ssl
 
     @staticmethod
-    def _resolve_int_env(
-        bruto: int | str | None, nome: str, fallback: int | None
+    def _resolve_int_env(  # noqa: PLR0913, PLR0917
+        raw: int | str | None,
+        name: str,
+        fallback: int | None,
+        negative_becomes: int | None = None,
     ) -> int | None:
         """
         Resolve um inteiro de configuração sem derrubar a construção.
@@ -251,73 +426,204 @@ class ParamManager:
         segurava a referência passava a tomar AttributeError em vez do
         erro original. Aqui a falha vira aviso e o fallback assume.
 
-        Zero é válido e desliga o intervalo de espera. Negativo cai no
-        fallback, para que um erro de digitação não vire um jeito
-        silencioso de desligá-lo.
+        Zero é sempre válido. Negativo cai no fallback por padrão, para
+        que um erro de digitação não vire um jeito silencioso de
+        desligar o intervalo de espera.
+
+        `negative_becomes` existe para CACHE_DURATION, onde o padrão seria
+        perigoso: hoje um valor negativo faz `_is_cache_valid` devolver
+        sempre False, ou seja, nunca cacheia. Mandá-lo para o fallback
+        transformaria "nunca cacheia" em "cacheia por uma hora" — um
+        afrouxamento silencioso numa biblioteca que serve `secret`.
+        Mapeando para 0, o comportamento observável fica idêntico.
         """
-        if bruto is None:
+        if raw is None:
             return fallback
 
-        valor = None
-        motivo_fallback = None
+        value = None
+        fallback_reason = None
+        is_negative = False
 
         # Já é int: validar sinal
-        if isinstance(bruto, int):
-            if bruto < 0:
-                motivo_fallback = f'é negativo ({bruto})'
+        if isinstance(raw, int):
+            if raw < 0:
+                is_negative = True
+                fallback_reason = f'é negativo ({raw})'
             else:
-                valor = bruto
+                value = raw
         else:
             # String: strip e tentar int
             try:
-                limpo = bruto.strip()
-                if not limpo:
-                    motivo_fallback = 'vazio'
+                stripped = raw.strip()
+                if not stripped:
+                    fallback_reason = 'vazio'
                 else:
-                    valor = int(limpo)
-                    if valor < 0:
-                        motivo_fallback = f'é negativo ({valor})'
+                    value = int(stripped)
+                    if value < 0:
+                        is_negative = True
+                        fallback_reason = f'é negativo ({value})'
+                        value = None
             except (ValueError, AttributeError) as e:
-                motivo_fallback = f'inválido ({bruto!r}): {e}'
+                fallback_reason = f'inválido ({raw!r}): {e}'
 
-        if motivo_fallback is not None:
+        if fallback_reason is not None:
+            if is_negative and negative_becomes is not None:
+                logger.warning(
+                    f'[ParamManager] {name} {fallback_reason}; '
+                    f'usando {negative_becomes}.'
+                )
+                return negative_becomes
             logger.warning(
-                f'[ParamManager] {nome} {motivo_fallback}; '
-                f'usando fallback.'
+                f'[ParamManager] {name} {fallback_reason}; usando fallback.'
             )
             return fallback
 
-        return valor
+        return value
+
+    def _snapshot_cache(self, app: str) -> Dict[str, Any]:
+        """
+        Retorna cópia rasa do cache de um app (CAS/R1).
+
+        Copiar o container nunca as folhas: o dict retornado é novo,
+        mas contém as mesmas referências de objeto que estavam em
+        self._cache[app]. Iterações sobre o snapshot não estouram com
+        RuntimeError mesmo se a thread concorrente modificar o original.
+        O aliasing das folhas em _process_parameters (tipos não
+        sensíveis) é comportamento observável e documentado — preservado.
+        """
+        with self._state_lock:
+            return dict(self._cache.get(app, {}))
+
+    def _snapshot_param_cache(self, app_name: str, param_name: str) -> Any:
+        """
+        Devolve o parâmetro do cache específico, ou `SEM_CACHE` (R5-b).
+
+        **Confere validade e lê numa ÚNICA seção crítica**, e é essa a
+        razão de existir. Antes, `get_param` fazia
+        `_is_param_cache_valid(...)` — que adquire e SOLTA o
+        `_state_lock` — e só então `self._param_cache[key]`. Um
+        `clear_cache(app, param)` concorrente, disparado por
+        `delete_param` ou por `upsert_params`, remove a chave na janela
+        entre as duas, e o `KeyError` **escapava para a aplicação
+        consumidora** — contrariando o contrato de que leitura devolve
+        valor ou `None`, nunca levanta.
+
+        Devolve a sentinela, e não `None`, porque `None` é valor
+        cacheável legítimo: o servidor pode responder `{'param': null}`.
+        Confundir "não está no cache" com "está e vale None" faria a
+        leitura ir à rede à toa.
+
+        O critério de validade é o mesmo de `_is_param_cache_valid`, que
+        continua existindo para o `get_cache_info` — lá só se relata a
+        validade, sem ler o valor depois, então não há janela.
+        """
+        param_cache_key = f'{app_name}:{param_name}'
+        with self._state_lock:
+            if (
+                param_cache_key not in self._param_cache
+                or param_cache_key not in self._param_cache_timestamp
+            ):
+                return SEM_CACHE
+            cache_time = self._param_cache_timestamp[param_cache_key]
+            if (time.time() - cache_time) >= self._cache_duration:
+                return SEM_CACHE
+            return self._param_cache[param_cache_key]
+
+    def _publish_cache(
+        self, app: str, params: Dict[str, Any], started_at: float
+    ) -> None:
+        """
+        Atualiza cache apenas se não foi escrito mais recentemente (CAS).
+
+        Impede que uma resposta atrasada sobrescreva cache mais novo.
+        """
+        with self._state_lock:
+            if self._cache_timestamp.get(app, 0) <= started_at:
+                self._cache[app] = params
+                self._cache_timestamp[app] = started_at
+
+    def _arm_breaker(self, app_name: str) -> None:
+        """Arma o circuit breaker para um app."""
+        with self._state_lock:
+            self._api_error_timestamp[app_name] = time.time()
+
+    def _disarm_breaker(self, app: str, started_at: float) -> None:
+        """
+        Desarma o breaker apenas se foi armado antes desta requisição (CAS).
+
+        Impede que uma resposta atrasada (de antes do erro) destrua o
+        registro do erro e abra o circuito prematuramente.
+
+        O empate desarma, de propósito. `time.time()` tem resolução de
+        ~15 ms no Windows, então um erro e uma requisição iniciada no
+        mesmo tique recebem o mesmo timestamp. Os dois lados do empate
+        custam coisas muito diferentes: desarmar cedo demais gasta uma
+        requisição a mais, que no pior caso rearma o breaker; deixar de
+        desarmar prende o cliente no fallback local pelo cooldown
+        inteiro — 3600s com os defaults de `get_instance`. Por isso a
+        comparação é `<=` e não `<`.
+        """
+        with self._state_lock:
+            if self._api_error_timestamp.get(app, 0) <= started_at:
+                self._api_error_timestamp.pop(app, None)
+
+    def _breaker_active(self, app: str) -> bool:
+        """Diz se o circuit breaker está ativo para este app."""
+        with self._state_lock:
+            if app not in self._api_error_timestamp:
+                return False
+            current_time = time.time()
+            error_time = self._api_error_timestamp[app]
+            return (current_time - error_time) < self._effective_cooldown
+
+    def _snapshot_info(self) -> Tuple[Dict, Dict, Dict]:
+        """
+        Cópia dos três dicts de timestamp (CAS/R1).
+
+        Para get_cache_info iterar fora do lock sem estouro de
+        RuntimeError.
+        """
+        with self._state_lock:
+            return (
+                dict(self._cache_timestamp),
+                dict(self._param_cache_timestamp),
+                dict(self._api_error_timestamp),
+            )
 
     def _purge_plaintext_cache(self) -> None:
         """
         Remove do banco local valores sensíveis gravados em claro por
         versões anteriores. Opt-in: default desligado.
+
+        Roda durante __init__ sob _lock_singleton, depois de self._lock
+        ser criado (linha 140).
         """
-        bruto = os.getenv(
+        raw = os.getenv(
             f'{self._instance_name.upper()}_PURGE_PLAINTEXT_CACHE',
             os.getenv('PARAM_MANAGER_PURGE_PLAINTEXT_CACHE', ''),
         )
-        if bruto.strip().lower() not in {'1', 'true', 'yes', 'on'}:
+        if raw.strip().lower() not in {'1', 'true', 'yes', 'on'}:
             return
 
         try:
-            for app_name in list(self._db.tables()):
-                table = self._db.table(app_name)
-                registro = table.get(doc_id=1)
-                if not registro or not isinstance(
-                    registro.get('params'), dict
-                ):
-                    continue
-                limpos = self._discard_unencrypted(
-                    app_name, registro['params']
-                )
-                if len(limpos) != len(registro['params']):
-                    table.update({'params': limpos}, doc_ids=[1])
-                    logger.warning(
-                        f'[ParamManager: {self._instance_name}] Valores em '
-                        f"claro removidos do cache local de '{app_name}'."
+            with self._lock:
+                for app_name in list(self._db.tables()):
+                    table = self._db.table(app_name)
+                    record = table.get(doc_id=1)
+                    if not record or not isinstance(
+                        record.get('params'), dict
+                    ):
+                        continue
+                    cleaned = self._discard_unencrypted(
+                        app_name, record['params']
                     )
+                    if len(cleaned) != len(record['params']):
+                        table.update({'params': cleaned}, doc_ids=[1])
+                        logger.warning(
+                            f'[ParamManager: {self._instance_name}] '
+                            f'Valores em claro removidos do cache '
+                            f"local de '{app_name}'."
+                        )
         except Exception as e:  # pragma: no cover
             logger.error(f'Falha ao purgar cache em claro: {e}')
 
@@ -371,15 +677,15 @@ class ParamManager:
         with self._lock:
             try:
                 table = self._db.table(app_name)
-                registro = table.get(doc_id=1)
-                if not registro or not isinstance(
-                    registro.get('params'), dict
+                record = table.get(doc_id=1)
+                if not record or not isinstance(
+                    record.get('params'), dict
                 ):
                     return
-                if param_name not in registro['params']:
+                if param_name not in record['params']:
                     return
-                registro['params'].pop(param_name)
-                table.update({'params': registro['params']}, doc_ids=[1])
+                record['params'].pop(param_name)
+                table.update({'params': record['params']}, doc_ids=[1])
                 logger.info(
                     f'[ParamManager: {self._instance_name}] Parâmetro '
                     f"'{param_name}' removido do banco local de "
@@ -403,17 +709,17 @@ class ParamManager:
         if not isinstance(params, dict):
             return params
 
-        seguros = {}
+        safe_params = {}
         for key, param in params.items():
             if ParamManager._is_encrypted_param(param):
-                seguros[key] = param
+                safe_params[key] = param
                 continue
             logger.warning(
                 f'[ParamManager: {self._instance_name}] Parâmetro sensível '
                 f"'{key}' do app '{app_name}' não está cifrado; "
                 f'descartado da persistência local.'
             )
-        return seguros
+        return safe_params
 
     def clear_cache(
         self, app_name: Optional[str] = None, param_name: Optional[str] = None
@@ -421,31 +727,45 @@ class ParamManager:
         """
         Limpa apenas o cache desta instância.
         """
-        if app_name and param_name:
-            key = f'{app_name}:{param_name}'
-            self._param_cache.pop(key, None)
-            self._param_cache_timestamp.pop(key, None)
-        elif app_name:
-            self._cache.pop(app_name, None)
-            self._cache_timestamp.pop(app_name, None)
-            self._api_error_timestamp.pop(app_name, None)
-            # Limpa chaves específicas que começam com o app
-            keys_to_del = [
-                k for k in self._param_cache if k.startswith(f'{app_name}:')
-            ]
-            for k in keys_to_del:
-                self._param_cache.pop(k, None)
-                self._param_cache_timestamp.pop(k, None)
-        else:
-            self._cache.clear()
-            self._cache_timestamp.clear()
-            self._param_cache.clear()
-            self._param_cache_timestamp.clear()
-            self._api_error_timestamp.clear()
+        with self._state_lock:
+            if app_name and param_name:
+                key = f'{app_name}:{param_name}'
+                self._param_cache.pop(key, None)
+                self._param_cache_timestamp.pop(key, None)
+            elif app_name:
+                self._cache.pop(app_name, None)
+                self._cache_timestamp.pop(app_name, None)
+                # IMPORTANTE: clear_cache é ação explícita do operador
+                # e desarma o breaker incondicionalmente. O desarme por
+                # sucesso de requisição é CAS-guardado em _disarm_breaker
+                # — duas semânticas diferentes sobre o mesmo dict. Sem este
+                # comentário, o próximo leitor "uniformiza" e reintroduz a
+                # race do desarme precoce (R5).
+                self._api_error_timestamp.pop(app_name, None)
+                # Limpa chaves específicas que começam com o app
+                keys_to_del = [
+                    k
+                    for k in self._param_cache
+                    if k.startswith(f'{app_name}:')
+                ]
+                for k in keys_to_del:
+                    self._param_cache.pop(k, None)
+                    self._param_cache_timestamp.pop(k, None)
+            else:
+                self._cache.clear()
+                self._cache_timestamp.clear()
+                self._param_cache.clear()
+                self._param_cache_timestamp.clear()
+                self._api_error_timestamp.clear()
 
         logger.info(f'[ParamManager: {self._instance_name}] Cache limpo.')
 
     def _auth_get_token(self):
+        """
+        Faz POST em /auth/token e retorna (token, refresh_token, expire_at).
+
+        **Rede fora do lock.** Atualização de estado acontece no chamador.
+        """
         if not self._username or not self._password:
             raise ValueError(
                 'Username ou password não configurados para autenticação.'
@@ -464,17 +784,25 @@ class ParamManager:
             raise Exception(f'Falha ao autenticar: {res.text}')
 
         auth_data = res.json()
-        self._token = auth_data.get('access_token')
-        self._refresh_token = auth_data.get('refresh_token')
+        token = auth_data.get('access_token')
+        refresh = auth_data.get('refresh_token')
 
         # token TTL: 30 min
-        self._token_expire_at = time.time() + 29 * 60
+        expire_at = time.time() + 29 * 60
 
-        return self._token
+        return token, refresh, expire_at
 
     def _auth_refresh_token(self):
+        """
+        Faz POST em /auth/refresh e retorna (token, refresh_token, expire_at).
+
+        **Rede fora do lock.** Atualização de estado acontece no chamador.
+
+        Se refresh falhar, retorna None para sinalizar que é preciso
+        fazer um get novo.
+        """
         if not self._refresh_token:
-            return self._auth_get_token()
+            return None
 
         url = f'{self._api_base_url}/auth/refresh'
 
@@ -485,51 +813,114 @@ class ParamManager:
         res = requests.post(url, data=data, timeout=self._timeout)
 
         if res.status_code != HTTPStatus.OK:
-            return self._auth_get_token()
+            return None
 
         auth_data = res.json()
-        self._token = auth_data.get('access_token')
-        self._refresh_token = auth_data.get('refresh_token')
+        token = auth_data.get('access_token')
+        refresh = auth_data.get('refresh_token')
 
-        self._token_expire_at = time.time() + 29 * 60
+        expire_at = time.time() + 29 * 60
 
-        return self._token
+        return token, refresh, expire_at
 
     def _get_valid_token(self):
-        # Double-checked locking: sem isso, N threads que percebem o token
-        # expirado disparam N renovações simultâneas.
-        if self._token and time.time() < self._token_expire_at:
-            return self._token
+        """
+        Retorna token válido: se não há, faz autenticação; se expirado,
+        renova. **Leitura atômica do par (_token, _token_expire_at)**.
 
+        Double-checked locking: a leitura rápida pode perder uma requisição
+        em race, mas apenas uma thread realmente faz rede.
+
+        Rede (POST) acontece FORA do lock para não bloquear outros acessos.
+        """
+        # O par é lido junto: separado, uma thread podia pegar o token
+        # novo com a expiração antiga (ou o contrário) e devolver como
+        # válido um token já vencido por até 29 minutos.
         with self._token_lock:
-            if self._token and time.time() < self._token_expire_at:
-                return self._token
-            if not self._token:
-                return self._auth_get_token()
-            return self._auth_refresh_token()
+            token = self._token
+            expire_at = self._token_expire_at
+        if token and time.time() < expire_at:
+            return token
+
+        return self._sync_get_new_token(token)
+
+    def _sync_get_new_token(self, seen_token):
+        """
+        Renova o token com apenas uma ida à rede, por mais threads que
+        cheguem juntas.
+
+        `seen_token` é o token que o chamador tinha em mãos quando
+        decidiu renovar. Se, ao pegar a vez, o token guardado já for
+        outro, alguém renovou no intervalo e o resultado dessa
+        renovação serve — é o que preserva o double-checked locking.
+        Sem essa conferência, N threads que chegam com o token expirado
+        renovam **em série**, uma ida à rede cada, e no Keycloak padrão
+        o refresh token é de uso único: a segunda invalidaria a sessão
+        que a primeira acabou de abrir.
+
+        A vez é dada por uma flag, e não por um segundo lock, porque um
+        lock aqui teria de ser segurado junto com `_token_lock` e
+        quebraria a regra `no-nesting` que CL-4 verifica. A rede
+        acontece fora de `_token_lock` para que ninguém que só queira
+        *ler* o par (token, expiração) fique preso atrás de um POST.
+        """
+        while True:
+            with self._token_lock:
+                if self._token is not None and self._token != seen_token:
+                    return self._token
+                if not self._token_renewing:
+                    self._token_renewing = True
+                    needs_get = not self._token
+                    break
+            time.sleep(0.001)
+
+        try:
+            # Rede FORA do lock
+            if needs_get:
+                token, refresh, expire_at = self._auth_get_token()
+            else:
+                result = self._auth_refresh_token()
+                if result is None:
+                    token, refresh, expire_at = self._auth_get_token()
+                else:
+                    token, refresh, expire_at = result
+
+            # Atualiza estado sob lock (escrita atômica)
+            with self._token_lock:
+                self._token = token
+                self._refresh_token = refresh
+                self._token_expire_at = expire_at
+
+            return token
+        finally:
+            # Libera a vez para as threads que estão esperando.
+            with self._token_lock:
+                self._token_renewing = False
 
     def _force_token_refresh(self):
         """
-        Renova o token sob o `_token_lock`, com re-check.
+        Força renovação do token de forma sincronizada.
 
         Chamar `_auth_refresh_token()` direto no retry de 401 furava o
-        double-checked locking de `_get_valid_token`: duas threads em
-        401 simultâneo fariam `POST /auth/refresh` com o mesmo refresh
-        token — de uso único no Keycloak padrão —, e a segunda
-        invalidaria a sessão que a primeira acabou de renovar.
+        double-checked locking: duas threads em 401 simultâneo fariam
+        `POST /auth/refresh` com o mesmo refresh token — de uso único
+        no Keycloak padrão —, e a segunda invalidaria a sessão que a
+        primeira acabou de renovar.
+
+        Passa o token que este chamador viu, e não a expiração: num 401
+        o token pode estar dentro da validade e mesmo assim ter sido
+        recusado, então o critério de "alguém já resolveu" é o token
+        ter mudado, não ter vencido.
         """
-        token_antes = self._token
         with self._token_lock:
-            # Outra thread pode ter renovado enquanto esperávamos.
-            if self._token != token_antes:
-                return self._token
-            return self._auth_refresh_token()
+            seen_token = self._token
+        return self._sync_get_new_token(seen_token)
 
     def _auth_headers(self):
         token = self._get_valid_token()
         return {'Authorization': f'Bearer {token}'}
 
-    def _auth_headers_opcionais(self) -> Dict[str, str]:
+    def _auth_headers_optional(self) -> Dict[str, str]:
         """
         Header de autenticação para os caminhos de leitura.
 
@@ -545,7 +936,279 @@ class ParamManager:
             )
             return {}
 
+    def _exigir_modo_local(self, operacao: str) -> None:
+        if self._mode != MODO_LOCAL:
+            raise LocalStoreError(
+                f'{operacao} só existe no modo local: em modo remoto não '
+                f'há rascunho para sincronizar.'
+            )
+
+    def sync_plan(self, app_name: str | None = None) -> Dict[str, Any]:
+        """
+        FASE 1: calcula o que a sincronização faria. **Não grava nada.**
+
+        Duas fases, e não uma, porque conflito não é decisão da
+        biblioteca. O plano é serializável de propósito — é ele que uma
+        tela de diff consome.
+
+        Rede acontece aqui, e **fora de qualquer lock**: segurar lock
+        durante o round-trip congelaria toda leitura de cache da
+        aplicação hospedeira pela sincronização inteira.
+        """
+        self._exigir_modo_local('sync_plan')
+
+        # (1) snapshot do que está pendente, sob o lock, e solta.
+        pendentes = self._local_store.pendentes(app_name)
+        apps_envolvidos = sorted({r['app'] for r in pendentes})
+
+        # (2) rede, sem lock nenhum na mão.
+        # Do SERVIDOR, não de list_apps(): em modo local aquele devolve
+        # os apps do sidecar, e o plano concluiria que um app criado
+        # offline já existe lá.
+        apps_remotos = {
+            app.get('name')
+            for app in (self._listar_apps_remotos().get('apps') or [])
+            if isinstance(app, dict)
+        }
+        remotos_por_app: Dict[str, Any] = {}
+        for app in apps_envolvidos:
+            if app not in apps_remotos:
+                remotos_por_app[app] = {}
+                continue
+            try:
+                remotos_por_app[app] = self._fetch_from_api(
+                    app, save_cache=False
+                )
+            except ParamNotFoundError:
+                # App existe mas ainda não tem parâmetro nenhum.
+                remotos_por_app[app] = {}
+
+        return montar_plano(pendentes, remotos_por_app, apps_remotos)
+
+    def sync_apply(self, plano: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        FASE 2: aplica **apenas** o que o plano marcou como aplicável.
+
+        Conflito nunca é aplicado. Apps sempre antes de parâmetros: um
+        PUT em app inexistente responde 404.
+
+        É retomável e idempotente, porque a unidade é o parâmetro e o
+        estado mora por parâmetro: um crash no meio deixa um conjunto
+        parcialmente sincronizado que a execução seguinte termina.
+
+        Os três caminhos de recusa são distintos de propósito. 422 é dado
+        errado, 403 é credencial, 404 é app faltando — colapsá-los num
+        só faria o front dizer "parâmetro inválido" para quem, na
+        verdade, não tem permissão.
+        """
+        self._exigir_modo_local('sync_apply')
+
+        resultado: Dict[str, Any] = {
+            'apps_created': [],
+            'synced': [],
+            'rejected': [],
+            'forbidden': [],
+            'failed': [],
+            'skipped_conflicts': [
+                {'app': i['app'], 'name': i['name'], 'reason': i['reason']}
+                for i in (plano.get('params') or [])
+                if i.get('action') == ACAO_CONFLITO
+            ],
+        }
+
+        for app in plano.get('apps_to_create') or []:
+            try:
+                self._criar_app_remoto(app)
+                resultado['apps_created'].append(app)
+            except Exception as e:
+                # Sem o app, nenhum parâmetro dele sobe. Registrar e
+                # seguir para os outros apps é melhor do que abortar a
+                # sincronização inteira por causa de um.
+                resultado['failed'].append({'app': app, 'error': str(e)})
+
+        falhos = {f.get('app') for f in resultado['failed']}
+        for item in itens_aplicaveis(plano):
+            if item['app'] in falhos:
+                continue
+            self._aplicar_item(item, resultado)
+
+        return resultado
+
+    def _criar_app_remoto(self, app_name: str) -> None:
+        """POST do app no servidor, com a descrição guardada localmente."""
+        registro = self._local_store.get_app(app_name) or {}
+        url = f'{self._api_base_url}/parameters/apps/'
+        res = requests.post(
+            url,
+            json={
+                'name': app_name,
+                'description': registro.get('description'),
+            },
+            headers=self._auth_headers(),
+            timeout=self._timeout,
+        )
+        if res.status_code != HTTPStatus.CREATED:
+            raise Exception(f'Erro ao criar app: {res.text}')
+        self._local_store.marcar_app_sincronizado(app_name)
+
+    def _aplicar_item(
+        self, item: Dict[str, Any], resultado: Dict[str, Any]
+    ) -> None:
+        """Empurra um parâmetro e reconcilia o estado local."""
+        app, nome = item['app'], item['name']
+        url = f'{self._api_base_url}/parameters/apps/{app}/params/'
+        try:
+            res = requests.put(
+                url,
+                json={nome: item['local']},
+                headers=self._auth_headers(),
+                timeout=self._timeout,
+            )
+        except Exception as e:
+            resultado['failed'].append(
+                {'app': app, 'name': nome, 'error': str(e)}
+            )
+            return
+
+        if res.status_code == HTTPStatus.OK:
+            # A versão canônica é a do servidor: ela volta cifrada e com
+            # os metadados completos. Manter a do cliente como
+            # autoritativa depois de uma sincronia bem-sucedida faria o
+            # base_hash nascer errado e o próximo plano ver conflito.
+            doc = (res.json().get('params') or {}).get(nome)
+            self._local_store.marcar(
+                app,
+                nome,
+                ESTADO_SYNCED,
+                base_hash=payload_hash(doc) if doc is not None else None,
+            )
+            resultado['synced'].append({'app': app, 'name': nome})
+            return
+
+        detalhe = res.text
+        if res.status_code == HTTPStatus.FORBIDDEN:
+            # Credencial, não dado. O parâmetro fica pendente: tentar de
+            # novo com a credencial certa resolve, e marcá-lo como
+            # rejeitado faria parecer que o valor está errado.
+            resultado['forbidden'].append({
+                'app': app,
+                'name': nome,
+                'error': detalhe,
+            })
+            return
+
+        # 422 e o resto: o parâmetro PERMANECE no store, com o detalhe do
+        # servidor verbatim. Descartá-lo em silêncio apagaria o trabalho
+        # de quem o escreveu, e resumir o erro tiraria a única informação
+        # que diz o que corrigir.
+        self._local_store.marcar(
+            app, nome, ESTADO_REJECTED, last_error=detalhe
+        )
+        resultado['rejected'].append({
+            'app': app,
+            'name': nome,
+            'error': detalhe,
+        })
+
+    def _type_catalog(self) -> Dict[str, Any]:
+        """
+        Catálogo em uso: o guardado do servidor, senão o embarcado.
+
+        O embarcado envelhece de propósito — é o que sobra quando não há
+        servidor. `refresh_type_catalog()` é como se atualiza.
+        """
+        if self._local_store is not None:
+            guardado = self._local_store.catalogo()
+            if guardado:
+                return guardado
+        return CATALOGO_EMBARCADO
+
+    def refresh_type_catalog(self) -> Dict[str, Any]:
+        """
+        Busca o catálogo de tipos no servidor e o guarda para uso offline.
+
+        ADITIVO. Precisa de rede, então roda antes de perder o servidor
+        de vista — tipicamente uma vez, ao preparar a máquina para
+        trabalhar em modo local.
+
+        Sem autenticação: a rota é descrição estática do esquema, e
+        exigir token justamente aqui derrotaria o propósito.
+        """
+        url = f'{self._api_base_url}/parameters/types'
+        res = requests.get(
+            url, timeout=self._timeout, verify=self._verify_ssl
+        )
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao buscar catálogo de tipos: {res.text}')
+
+        catalogo = res.json()
+        if self._local_store is not None:
+            self._local_store.guardar_catalogo(catalogo)
+        else:
+            logger.info(
+                f'[ParamManager: {self._instance_name}] Catálogo obtido, '
+                f'mas não guardado: só o modo local mantém sidecar.'
+            )
+        return catalogo
+
+    def _params_locais(self, app_name: str) -> Dict[str, Any]:
+        """Parâmetros do app no sidecar, na forma `{nome: payload}`."""
+        return {
+            registro['name']: (registro.get('payload') or {})
+            for registro in self._local_store.list_params(app_name)
+        }
+
+    def list_apps(self) -> Dict[str, Any]:
+        """
+        Lista os apps. ADITIVO: não existia antes, então não quebra nada.
+
+        Em modo remoto consome `GET /parameters/apps/`, que o cliente não
+        chamava até agora — a rota está congelada no teste de contrato
+        justamente porque passou a ter consumidor.
+
+        Devolve a mesma forma de topo nos dois modos: `{'apps': [...]}`.
+        """
+        if self._mode == MODO_LOCAL:
+            return {'apps': self._local_store.list_apps()}
+        return self._listar_apps_remotos()
+
+    def _listar_apps_remotos(self) -> Dict[str, Any]:
+        """
+        Lista os apps do SERVIDOR, independentemente do modo.
+
+        Existe separado de `list_apps` porque a sincronização precisa
+        justamente do outro lado: em modo local, `list_apps` devolve os
+        apps do sidecar, e usá-lo no plano faria o cliente concluir que
+        um app criado offline já existe no servidor — e então buscar
+        parâmetros de um app que não está lá.
+        """
+        url = f'{self._api_base_url}/parameters/apps/'
+        res = requests.get(
+            url,
+            headers=self._auth_headers_optional(),
+            timeout=self._timeout,
+            verify=self._verify_ssl,
+        )
+        if res.status_code != HTTPStatus.OK:
+            raise Exception(f'Erro ao listar apps: {res.text}')
+        return res.json()
+
     def create_app(self, name: str, description: str | None = None):
+        if self._mode == MODO_LOCAL:
+            registro = self._local_store.upsert_app(name, description)
+            logger.info(
+                f'[ParamManager: {self._instance_name}] App {name!r} '
+                f'criado localmente. Ele só existirá no servidor depois '
+                f'de sincronizar.'
+            )
+            # Mesma forma de topo que o servidor devolve
+            # (AppCreatedResponse): quem lê res['app'] não muda de código
+            # ao alternar de modo.
+            return {
+                'message': f'App {name} criado localmente',
+                'app': registro,
+            }
+
         url = f'{self._api_base_url}/parameters/apps/'
 
         payload = {'name': name, 'description': description}
@@ -600,6 +1263,46 @@ class ParamManager:
         payload[param_name].update({
             key: val for key, val in optional_fields.items() if val is not None
         })
+
+        if self._mode == MODO_LOCAL:
+            # Conselho, não veto: quem valida de verdade é o servidor, na
+            # sincronização. Isto existe para o erro de digitação não
+            # aparecer só no fim de uma sessão inteira de trabalho
+            # offline. Avisar e gravar é deliberado — bloquear aqui
+            # significaria reimplementar a regra do servidor, que é o
+            # erro que o envelope criptográfico já custou caro.
+            for aviso in validar_advisory(
+                payload[param_name], self._type_catalog()
+            ):
+                logger.warning(
+                    f'[ParamManager: {self._instance_name}] '
+                    f'{app_name}.{param_name}: {aviso}. O parâmetro foi '
+                    f'gravado localmente; o servidor pode recusá-lo na '
+                    f'sincronização.'
+                )
+
+            # `dirty` quando já foi sincronizado alguma vez, `draft`
+            # quando nunca. A diferença é o que separa "criei agora" de
+            # "editei algo que o servidor já conhece", e é ela que a
+            # sincronização usa para decidir se precisa conferir
+            # divergência antes de empurrar.
+            anterior = self._local_store.get_param(app_name, param_name)
+            estado = (
+                ESTADO_DIRTY
+                if anterior and anterior.get('base_hash')
+                else ESTADO_DRAFT
+            )
+            self._local_store.upsert_param(
+                app_name, param_name, payload[param_name], state=estado
+            )
+            # Garante o app no sidecar: upsert_params num app que ainda
+            # não existe é caminho comum no desenvolvimento local.
+            if not self._local_store.get_app(app_name):
+                self._local_store.upsert_app(app_name)
+            self.clear_cache(app_name, param_name)
+            # Mesma forma de topo que o PUT do servidor devolve.
+            return {'app': app_name, 'params': payload}
+
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
 
         def _do_request():
@@ -621,15 +1324,32 @@ class ParamManager:
         if res.status_code != HTTPStatus.OK:
             raise Exception(f'Erro ao fazer upsert de parâmetros: {res.text}')
 
-        self._cache[app_name] = res.json().get('params', {})
-        self._cache_timestamp[app_name] = time.time()
+        params = res.json().get('params', {})
+        # Aqui o timestamp é o de AGORA, não o do início da requisição:
+        # este processo acabou de escrever o valor, então a publicação é
+        # autoritativa e precisa vencer o CAS. Trocar por um instante
+        # anterior à chamada faria um GET concorrente mais novo derrubar
+        # a escrita que o próprio chamador acabou de fazer.
+        self._publish_cache(app_name, params, time.time())
         # Invalida cache por parâmetro; ver delete_param para a ordem.
         self.clear_cache(app_name, param_name)
-        self._save_to_local_db(app_name, self._cache[app_name])
+        # Passa snapshot do cache para evitar iteração em estrutura viva.
+        self._save_to_local_db(app_name, self._snapshot_cache(app_name))
 
         return res.json()
 
     def delete_param(self, app_name: str, param_name: str):
+        if self._mode == MODO_LOCAL:
+            if not self._local_store.delete_param(app_name, param_name):
+                raise LocalStoreError(
+                    f'Erro ao deletar parâmetro: {param_name!r} não '
+                    f'existe localmente no app {app_name!r}.'
+                )
+            self.clear_cache(app_name, param_name)
+            return {
+                'message': f'Parâmetro {param_name} removido localmente'
+            }
+
         url = (
             f'{self._api_base_url}/parameters/apps/'
             f'{app_name}/params/{param_name}'
@@ -642,16 +1362,25 @@ class ParamManager:
         if res.status_code != HTTPStatus.OK:
             raise Exception(f'Erro ao deletar parâmetro: {res.text}')
 
-        # Remove do cache local
-        if app_name in self._cache:
-            self._cache[app_name].pop(param_name, None)
+        # Remove do cache local substituindo por dict novo (R2).
+        # Não mutar in-place: o dict retornado por referência ao
+        # chamador seria afetado.
+        with self._state_lock:
+            if app_name in self._cache:
+                self._cache[app_name] = {
+                    k: v
+                    for k, v in self._cache[app_name].items()
+                    if k != param_name
+                }
 
         # Invalida cache por parâmetro. Deve vir ANTES de
         # _remove_from_local_db para evitar que um get_param concorrente
         # repopule _param_cache a partir de um _cache ainda sujo.
-        # Chamar clear_cache de dentro de _remove_from_local_db seria
-        # deadlock: aquele método segura self._lock, que é threading.Lock
-        # (não RLock), enquanto clear_cache não adquire lock.
+        # E precisa continuar FORA de _remove_from_local_db: aquele
+        # método segura self._lock e clear_cache passou a adquirir
+        # self._state_lock (CL-2), então chamá-lo de lá criaria a aresta
+        # _lock -> _state_lock e fecharia o ciclo ABBA com a aresta
+        # oposta. Ambos são threading.Lock, não RLock, de propósito.
         self.clear_cache(app_name, param_name)
 
         # Remoção explícita: o merge de _save_to_local_db ressuscitaria
@@ -663,6 +1392,15 @@ class ParamManager:
         return res.json()
 
     def delete_app(self, app_name: str):
+        if self._mode == MODO_LOCAL:
+            if not self._local_store.delete_app(app_name):
+                raise LocalStoreError(
+                    f'Erro ao deletar app: {app_name!r} não existe '
+                    f'localmente.'
+                )
+            self.clear_cache(app_name)
+            return {'message': f'App {app_name} removido localmente'}
+
         url = f'{self._api_base_url}/parameters/apps/{app_name}'
 
         res = requests.delete(
@@ -675,155 +1413,40 @@ class ParamManager:
 
         return res.json()
 
-    @staticmethod
-    def _is_encrypted_param(param: Any) -> bool:
-        """
-        Diz se um parâmetro sensível ainda está com o valor cifrado.
+    # As cinco staticmethods abaixo viraram delegações para
+    # `param_manager.crypto` na decomposição. Ficam aqui porque
+    # `ParamManager._process_parameter` e afins são chamados por toda a
+    # classe e pela suíte; apagá-las seria mudança de superfície, não
+    # movimentação de código.
+    _is_encrypted_param = staticmethod(_is_encrypted_param)
+    _process_parameters = staticmethod(_process_parameters)
 
-        Parâmetros de tipo não sensível são sempre considerados seguros
-        para persistir.
-        """
-        if not isinstance(param, dict):
-            return True
+    _process_parameter = staticmethod(_process_parameter)
+    _extract_value = staticmethod(_extract_value)
 
-        tipo = param.get('type')
-        value = param.get('value')
+    _decrypt_param = staticmethod(_decrypt_param)
 
-        if tipo == 'secret':
-            return _is_envelope(value)
-        if tipo == 'user':
-            return isinstance(value, dict) and _is_envelope(
-                value.get('password')
-            )
-        if tipo == 'users':
-            return isinstance(value, list) and all(
-                isinstance(item, dict) and _is_envelope(item.get('password'))
-                for item in value
-            )
-        return True
-
-    @staticmethod
-    def _process_parameters(params: dict) -> dict:
-        """
-        Devolve os parâmetros com os valores sensíveis decifrados.
-
-        Para `secret`, `user` e `users` devolve uma cópia profunda — é
-        o que garante que o texto claro nunca alcance o cache nem o
-        banco local. Tipos não sensíveis são devolvidos POR REFERÊNCIA:
-        o dict retornado é o mesmo objeto guardado em `self._cache`, e
-        mutá-lo altera o cache do processo.
-        """
-        return {
-            key: ParamManager._process_parameter(param)
-            for key, param in params.items()
-        }
-
-    @staticmethod
-    def _process_parameter(params: dict) -> dict | None:
-        """
-        Decifra um parâmetro sensível devolvendo uma cópia.
-
-        Tipos fora de SENSITIVE_TYPES são devolvidos como vieram, sem
-        cópia — ver a nota de aliasing em `_process_parameters`.
-        """
-        if not isinstance(params, dict):
-            return params
-
-        if params.get('type') not in SENSITIVE_TYPES:
-            return params
-
-        params = copy.deepcopy(params)
-
-        if params.get('type') == 'secret':
-            raw = params.get('value')
-            if isinstance(raw, dict):
-                params['value'] = ParamManager._descriptografar_param(raw)
-        elif params.get('type') == 'users':
-            raw = params.get('value')
-            if isinstance(raw, list):
-                for item in raw:
-                    if isinstance(item, dict) and isinstance(
-                        item.get('password'), dict
-                    ):
-                        item['password'] = ParamManager._descriptografar_param(
-                            item['password']
-                        )
-        elif params.get('type') == 'user':
-            raw = params.get('value')
-            if isinstance(raw, dict):
-                if isinstance(raw.get('password'), dict):
-                    raw['password'] = ParamManager._descriptografar_param(
-                        raw['password']
-                    )
-        return params
-
-    @staticmethod
-    def _extract_value(param_value: dict) -> Any:
-        if not isinstance(param_value, dict):
-            return None
-        if param_value.get('type') in SENSITIVE_TYPES:
-            param_value = ParamManager._process_parameter(param_value)
-        return param_value.get('value')
-
-    @staticmethod
-    def _descriptografar_param(value: dict) -> str | None:
-        try:
-            if not all(
-                k in value for k in ['salt', 'master_key', 'crypto_data']
-            ):
-                return None
-
-            app_custody_key = os.getenv('CHAVE_CUSTODIA_APP') or os.getenv(
-                'APP_CUSTODY_KEY'
-            )
-            if not app_custody_key:
-                logger.error(
-                    '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
-                )
-                return None
-
-            salt = bytes.fromhex(value['salt'])
-            chave_custodia = PBKDF2(
-                app_custody_key.encode(),
-                salt,
-                dkLen=32,
-                count=100_000,
-                hmac_hash_module=SHA256,
-            )
-
-            cm_iv = bytes.fromhex(value['master_key']['iv'])
-            cm_tag = bytes.fromhex(value['master_key']['tag'])
-
-            cm_data = bytes.fromhex(
-                value['master_key'].get('data')
-                or value['master_key'].get('dado')
-            )
-
-            cipher_cm = AES.new(chave_custodia, AES.MODE_GCM, cm_iv)
-            chave_mestra = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
-
-            pw_iv = bytes.fromhex(value['crypto_data']['iv'])
-            pw_tag = bytes.fromhex(value['crypto_data']['tag'])
-            pw_data = bytes.fromhex(
-                value['crypto_data'].get('data')
-                or value['crypto_data'].get('dado')
-            )
-            cipher_pw = AES.new(chave_mestra, AES.MODE_GCM, pw_iv)
-            senha = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
-
-            return senha.decode()
-        except Exception as e:
-            logger.error(
-                f'Erro ao descriptografar parâmetro secreto: {str(e)}'
-            )
-            return None
-
-    def get_all_params(self, app_name: str) -> Dict[str, Any]:
+    # noqa PLR0911 pelo mesmo motivo de get_param: a cadeia de leitura é
+    # uma sequência de saídas antecipadas — modo, cache, breaker, API e
+    # os três ramos de erro. Achatá-la em um único return esconderia a
+    # estrutura, que é justamente o que se precisa enxergar aqui.
+    def get_all_params(self, app_name: str) -> Dict[str, Any]:  # noqa: PLR0911
         logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
+
+        if self._mode == MODO_LOCAL:
+            # Sem cache de propósito: o arquivo é local e quem está
+            # desenvolvendo acabou de editá-lo. Cachear aqui só criaria
+            # a chance de servir o valor anterior ao próprio usuário.
+            # Sem breaker também — não existe rede para falhar.
+            return _process_parameters(self._params_locais(app_name))
+
         if self._is_cache_valid(app_name):
             logger.info(f'Usando cache para o app: {app_name}')
-            return ParamManager._process_parameters(self._cache[app_name])
-        if self._is_api_error_cached(app_name):
+            # Snapshot para processar fora do lock (R1).
+            return ParamManager._process_parameters(
+                self._snapshot_cache(app_name)
+            )
+        if self._breaker_active(app_name):
             logger.warning(
                 f'API para {app_name} está em cooldown.'
                 f'Usando dados locais ou cache.'
@@ -835,9 +1458,16 @@ class ParamManager:
         try:
             params = self._fetch_from_api(app_name)
             return ParamManager._process_parameters(params)
+        except ParamNotFoundError as e:
+            logger.warning(
+                f'Parâmetros não encontrados (404) para {app_name}: {str(e)}'
+            )
+            return ParamManager._process_parameters(
+                self._handle_api_error(app_name, None, e)
+            )
         except (Timeout, ConnectionError) as e:
             logger.error(f'Erro de conexão/timeout: {str(e)}')
-            self._api_error_timestamp[app_name] = time.time()
+            self._arm_breaker(app_name)
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
@@ -845,12 +1475,12 @@ class ParamManager:
             logger.error(f'Erro inesperado ao buscar da API: {str(e)}')
             # Erro HTTP também precisa armar o cooldown, senão a lib
             # martela um servidor que está devolvendo 500.
-            self._api_error_timestamp[app_name] = time.time()
+            self._arm_breaker(app_name)
             return ParamManager._process_parameters(
                 self._handle_api_error(app_name, None, e)
             )
 
-    def get_param(
+    def get_param(  # noqa: PLR0911
         self, app_name: str, param_name: str, save_cache: bool = True
     ) -> Any:
         logger.info(
@@ -858,26 +1488,39 @@ class ParamManager:
         )
         param_cache_key = f'{app_name}:{param_name}'
 
-        # Verifica cache específico
-        if self._is_param_cache_valid(app_name, param_name):
+        if self._mode == MODO_LOCAL:
+            registro = self._local_store.get_param(app_name, param_name)
+            # None e não exceção: o contrato de leitura desta biblioteca
+            # é devolver valor ou None, nunca explodir na cara de quem
+            # consome. Vale igual no modo local.
+            if not registro:
+                return None
+            return _extract_value(registro.get('payload') or {})
+
+        # Cache específico: conferir e ler numa única seção crítica.
+        # Separar as duas etapas é o defeito R5-b — ver
+        # _snapshot_param_cache.
+        em_cache = self._snapshot_param_cache(app_name, param_name)
+        if em_cache is not SEM_CACHE:
             logger.info(
                 f'Usando cache específico para o parâmetro:'
                 f' {param_name} do app: {app_name}'
             )
-            return ParamManager._extract_value(
-                self._param_cache[param_cache_key]
-            )
+            return ParamManager._extract_value(em_cache)
         if self._is_cache_valid(app_name):
             logger.info(
                 f'Usando cache global do app para o parâmetro: {param_name}'
             )
-            params = self._cache[app_name]
+            # Snapshot para evitar race ao ler e depois atualizar cache
+            # (R1).
+            params = self._snapshot_cache(app_name)
             param_value = params.get(param_name)
             if param_value is not None:
-                self._param_cache[param_cache_key] = param_value
-                self._param_cache_timestamp[param_cache_key] = time.time()
+                with self._state_lock:
+                    self._param_cache[param_cache_key] = param_value
+                    self._param_cache_timestamp[param_cache_key] = time.time()
                 return ParamManager._extract_value(param_value)
-        if self._is_api_error_cached(app_name):
+        if self._breaker_active(app_name):
             logger.warning(
                 f'API para {app_name} está em cooldown. Usando dados locais.'
             )
@@ -894,12 +1537,23 @@ class ParamManager:
             if not isinstance(param_value, dict):
                 param_value = dict()
             return ParamManager._extract_value(param_value)
+        except ParamNotFoundError as e:
+            logger.warning(
+                f'Parâmetro não encontrado (404) na API:'
+                f'{app_name=} {param_name=} {save_cache=} {str(e)}'
+            )
+            params = self._handle_api_error(app_name, param_name, e)
+            return (
+                ParamManager._extract_value(params.get(param_name, dict()))
+                if params
+                else None
+            )
         except (Timeout, ConnectionError) as e:
             logger.error(
                 f'Erro de conexão/timeout ao buscar parâmetro da API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
             )
-            self._api_error_timestamp[app_name] = time.time()
+            self._arm_breaker(app_name)
             params = self._handle_api_error(app_name, param_name, e)
             return (
                 ParamManager._extract_value(params.get(param_name, dict()))
@@ -911,7 +1565,7 @@ class ParamManager:
                 f'Erro inesperado ao buscar parâmetro da API:'
                 f'{app_name=} {param_name=} {save_cache=} {str(e)}'
             )
-            self._api_error_timestamp[app_name] = time.time()
+            self._arm_breaker(app_name)
             params = self._handle_api_error(app_name, param_name, e)
             return (
                 ParamManager._extract_value(params.get(param_name, dict()))
@@ -927,13 +1581,18 @@ class ParamManager:
         url = f'{self._api_base_url}/parameters/apps/{app_name}/params/'
         logger.info(f'Buscando todos os parâmetros da API: {url}')
 
+        started_at = time.time()
         response = requests.get(
             url,
             timeout=self._timeout,
             verify=self._verify_ssl,
-            headers=self._auth_headers_opcionais(),
+            headers=self._auth_headers_optional(),
         )
 
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            raise ParamNotFoundError(
+                f'API retornou status code {response.status_code}'
+            )
         if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
 
@@ -944,7 +1603,8 @@ class ParamManager:
                 f'Erro de JSON na resposta da API para {app_name}: {e}'
             )
             try:
-                self._db.drop_table(app_name)
+                with self._lock:
+                    self._db.drop_table(app_name)
                 logger.warning(
                     f"Tabela local do app '{app_name}' foi limpa após "
                     f'erro de parsing da API.'
@@ -955,14 +1615,15 @@ class ParamManager:
 
         params = data.get('params', {})
 
-        self._cache[app_name] = params
-        self._cache_timestamp[app_name] = time.time()
+        # CAS: não sobrescreve cache mais novo (R5).
+        self._publish_cache(app_name, params, started_at)
 
         if save_cache:
-            self._save_to_local_db(app_name, params)
+            # Passa snapshot para evitar iteração em estrutura viva (R1).
+            self._save_to_local_db(app_name, self._snapshot_cache(app_name))
 
-        if app_name in self._api_error_timestamp:
-            del self._api_error_timestamp[app_name]
+        # CAS: só desarma se o breaker foi armado antes desta requisição.
+        self._disarm_breaker(app_name, started_at)
 
         return params
 
@@ -974,52 +1635,65 @@ class ParamManager:
             f'{app_name}/params/{param_name}'
         )
         logger.info(f'Buscando parâmetro específico da API: {url}')
+        started_at = time.time()
         response = requests.get(
             url,
             timeout=self._timeout,
             verify=self._verify_ssl,
-            headers=self._auth_headers_opcionais(),
+            headers=self._auth_headers_optional(),
         )
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            raise ParamNotFoundError(
+                f'API retornou status code {response.status_code}'
+            )
         if response.status_code != HTTPStatus.OK:
             raise Exception(f'API retornou status code {response.status_code}')
         data = response.json()
         param_value = data.get('param')
         if save_cache:
             param_cache_key = f'{app_name}:{param_name}'
-            self._param_cache[param_cache_key] = param_value
-            self._param_cache_timestamp[param_cache_key] = time.time()
-            if app_name in self._cache:
-                self._cache[app_name][param_name] = param_value
-            else:
-                self._cache[app_name] = {param_name: param_value}
-            self._save_to_local_db(app_name, self._cache[app_name])
-        if app_name in self._api_error_timestamp:
-            del self._api_error_timestamp[app_name]
+            with self._state_lock:
+                self._param_cache[param_cache_key] = param_value
+                self._param_cache_timestamp[param_cache_key] = time.time()
+                if app_name in self._cache:
+                    # Não mutar in-place: substituir por dict novo (R2).
+                    self._cache[app_name] = {
+                        **self._cache[app_name],
+                        param_name: param_value,
+                    }
+                else:
+                    self._cache[app_name] = {param_name: param_value}
+            # Passa snapshot para evitar iteração em estrutura viva (R1).
+            self._save_to_local_db(app_name, self._snapshot_cache(app_name))
+        # CAS: só desarma se o breaker foi armado antes desta requisição.
+        self._disarm_breaker(app_name, started_at)
 
         return param_value
 
     def _is_cache_valid(self, app_name: str) -> bool:
-        if (
-            app_name not in self._cache
-            or app_name not in self._cache_timestamp
-        ):
-            return False
-        current_time = time.time()
-        cache_time = self._cache_timestamp[app_name]
+        with self._state_lock:
+            if (
+                app_name not in self._cache
+                or app_name not in self._cache_timestamp
+            ):
+                return False
+            current_time = time.time()
+            cache_time = self._cache_timestamp[app_name]
 
-        return (current_time - cache_time) < self._cache_duration
+            return (current_time - cache_time) < self._cache_duration
 
     def _is_param_cache_valid(self, app_name: str, param_name: str) -> bool:
         param_cache_key = f'{app_name}:{param_name}'
-        if (
-            param_cache_key not in self._param_cache
-            or param_cache_key not in self._param_cache_timestamp
-        ):
-            return False
-        current_time = time.time()
-        cache_time = self._param_cache_timestamp[param_cache_key]
+        with self._state_lock:
+            if (
+                param_cache_key not in self._param_cache
+                or param_cache_key not in self._param_cache_timestamp
+            ):
+                return False
+            current_time = time.time()
+            cache_time = self._param_cache_timestamp[param_cache_key]
 
-        return (current_time - cache_time) < self._cache_duration
+            return (current_time - cache_time) < self._cache_duration
 
     @property
     def _effective_cooldown(self) -> int:
@@ -1028,21 +1702,14 @@ class ParamManager:
             return self._api_error_cooldown
         return self._cache_duration
 
-    def _is_api_error_cached(self, app_name: str) -> bool:
-        if app_name not in self._api_error_timestamp:
-            return False
-
-        current_time = time.time()
-        error_time = self._api_error_timestamp[app_name]
-        return (current_time - error_time) < self._effective_cooldown
-
     def _get_from_local_db(
         self, app_name: str, param_name: Optional[str] = None
     ) -> Dict[str, Any]:
         logger.info(f'Buscando parâmetros localmente para o app: {app_name}')
         try:
-            table = self._db.table(app_name)
-            records = table.all()
+            with self._lock:
+                table = self._db.table(app_name)
+                records = table.all()
             if not records:
                 logger.warning(
                     f'Nenhum registro local encontrado para o app: {app_name}'
@@ -1064,7 +1731,8 @@ class ParamManager:
                 # durante indisponibilidade da API, quando o fallback
                 # offline é o que resta. Um registro ilegível de um app
                 # não pode apagar o cache de todos os outros.
-                self._db.drop_table(app_name)
+                with self._lock:
+                    self._db.drop_table(app_name)
                 logger.warning(
                     f"Tabela local do app '{app_name}' foi limpa após "
                     f'erro de leitura.'
@@ -1081,8 +1749,15 @@ class ParamManager:
         return self._get_from_local_db(app_name, param_name)
 
     def get_cache_info(self) -> Dict[str, Any]:
+        # Snapshot dos timestamps para iterar fora do lock (R1).
+        cache_ts, param_cache_ts, error_ts = self._snapshot_info()
+
+        # Snapshot dos keys de cache para evitar RuntimeError (R1).
+        with self._state_lock:
+            cached_apps = list(self._cache.keys())
+
         info = {
-            'apps_cached': list(self._cache.keys()),
+            'apps_cached': cached_apps,
             'cache_timestamps': {},
             'cache_valid': {},
             'params_cached': [],
@@ -1091,7 +1766,7 @@ class ParamManager:
             'api_error_timestamps': {},
         }
 
-        for app_name, timestamp in self._cache_timestamp.items():
+        for app_name, timestamp in cache_ts.items():
             dt = datetime.fromtimestamp(timestamp)
             expires_at = dt + timedelta(seconds=self._cache_duration)
             is_valid = self._is_cache_valid(app_name)
@@ -1106,7 +1781,7 @@ class ParamManager:
                 else 0,
             }
             info['cache_valid'][app_name] = is_valid
-        for param_key, timestamp in self._param_cache_timestamp.items():
+        for param_key, timestamp in param_cache_ts.items():
             info['params_cached'].append(param_key)
 
             dt = datetime.fromtimestamp(timestamp)
@@ -1126,12 +1801,10 @@ class ParamManager:
                 else 0,
             }
             info['param_cache_valid'][param_key] = is_valid
-        for app_name, timestamp in self._api_error_timestamp.items():
+        for app_name, timestamp in error_ts.items():
             dt = datetime.fromtimestamp(timestamp)
-            cooldown_ends_at = dt + timedelta(
-                seconds=self._effective_cooldown
-            )
-            is_cooldown_active = self._is_api_error_cached(app_name)
+            cooldown_ends_at = dt + timedelta(seconds=self._effective_cooldown)
+            is_cooldown_active = self._breaker_active(app_name)
 
             info['api_error_timestamps'][app_name] = {
                 'error_at': dt.isoformat(),
