@@ -24,6 +24,7 @@ from unittest.mock import patch
 import pytest
 
 import param_manager.manager as manager_mod
+from param_manager.manager import SEM_CACHE
 
 API = 'http://test-api.example.com'
 
@@ -399,29 +400,20 @@ def test_violacoes_conhecidas_nao_crescem():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        'R5-b em aberto: get_param faz check-then-act entre '
-        '_is_param_cache_valid (que solta o _state_lock) e a leitura '
-        'self._param_cache[key], em manager.py:1128-1135. Um '
-        'clear_cache(app, param) concorrente — chamado por delete_param '
-        'e por upsert_params — remove a chave na janela e o KeyError '
-        'escapa para a aplicação consumidora. Corrigir é escopo de '
-        'outra unidade; quando entrar, este xfail vira verde e o '
-        'strict=True obriga a remover o marcador.'
-    ),
-)
-def test_get_param_nao_estoura_keyerror_em_corrida_com_clear_cache(
+def test_get_param_nao_usa_mais_o_validador_de_duas_etapas(
     setup_param_manager,
 ):
     """
-    FIX-PM-13: leitura pública não pode morrer por race de cache.
+    FIX-PM-13 (R5-b corrigido): a leitura do cache é uma etapa só.
 
-    Reprodução determinística — a concorrência é simulada de dentro da
-    janela, não por sorte de escalonamento: o side_effect remove a
-    chave exatamente entre a checagem de validade e a leitura, que é o
-    que uma thread concorrente faria.
+    Guarda contra REINTRODUÇÃO, e é por isso que ela é feita assim: se
+    alguém voltar a chamar `_is_param_cache_valid` antes de ler
+    `_param_cache`, a janela entre soltar o lock e ler volta com ela, e
+    este teste reprova na hora.
+
+    A janela era real: `clear_cache(app, param)` — disparado por
+    `delete_param` e por `upsert_params` — remove a chave, e o `KeyError`
+    escapava para a aplicação consumidora.
     """
     pm, mock_table, _requests_mock = setup_param_manager
     mock_table.get.return_value = None
@@ -430,16 +422,98 @@ def test_get_param_nao_estoura_keyerror_em_corrida_com_clear_cache(
     pm._param_cache[chave] = {'value': 1, 'type': 'int'}
     pm._param_cache_timestamp[chave] = time.time()
 
-    def valida_e_alguem_limpa(app_name, param_name):
-        # A thread concorrente entra aqui, no exato ponto em que o
-        # _state_lock já foi solto e a leitura ainda não aconteceu.
-        pm._param_cache.pop(f'{app_name}:{param_name}', None)
-        pm._param_cache_timestamp.pop(f'{app_name}:{param_name}', None)
-        return True
-
     with patch.object(
-        pm, '_is_param_cache_valid', side_effect=valida_e_alguem_limpa
+        pm,
+        '_is_param_cache_valid',
+        side_effect=AssertionError(
+            'get_param voltou ao padrão de duas etapas — ver R5-b'
+        ),
     ):
-        # Não deve levantar: o contrato da lib é que leitura devolve
-        # valor ou None, nunca explode na cara do consumidor.
-        pm.get_param('app_teste', 'chave')
+        assert pm.get_param('app_teste', 'chave') == 1
+
+
+def test_snapshot_param_cache_distingue_ausente_de_none(
+    setup_param_manager,
+):
+    """
+    FIX-PM-13: a sentinela existe porque `None` é valor cacheável.
+
+    O servidor pode responder `{'param': null}`. Se ausência e `None`
+    fossem o mesmo, um parâmetro legitimamente nulo faria toda leitura
+    ir à rede à toa.
+    """
+    pm, mock_table, _requests_mock = setup_param_manager
+    mock_table.get.return_value = None
+
+    assert pm._snapshot_param_cache('app_teste', 'nada') is SEM_CACHE
+
+    chave = 'app_teste:nulo'
+    pm._param_cache[chave] = None
+    pm._param_cache_timestamp[chave] = time.time()
+    assert pm._snapshot_param_cache('app_teste', 'nulo') is None
+
+
+def test_snapshot_param_cache_respeita_a_expiracao(setup_param_manager):
+    """O critério de validade é o mesmo de `_is_param_cache_valid`."""
+    pm, mock_table, _requests_mock = setup_param_manager
+    mock_table.get.return_value = None
+
+    chave = 'app_teste:velho'
+    pm._param_cache[chave] = {'value': 1, 'type': 'int'}
+    pm._param_cache_timestamp[chave] = time.time() - (pm._cache_duration + 1)
+
+    assert pm._snapshot_param_cache('app_teste', 'velho') is SEM_CACHE
+
+
+def test_leitura_sobrevive_a_clear_cache_concorrente(setup_param_manager):
+    """
+    FIX-PM-13: o efeito observável, com threads de verdade.
+
+    Metade das threads lê enquanto a outra metade limpa o cache do mesmo
+    parâmetro. Nenhuma exceção pode escapar — o contrato é devolver valor
+    ou None. Com o código antigo isto levantava `KeyError`.
+    """
+    pm, mock_table, requests_mock = setup_param_manager
+    mock_table.get.return_value = None
+    requests_mock.get(
+        f'{API}/parameters/apps/app_teste/params/chave',
+        json={'param': {'value': 1, 'type': 'int'}},
+    )
+
+    chave = 'app_teste:chave'
+    pm._param_cache[chave] = {'value': 1, 'type': 'int'}
+    pm._param_cache_timestamp[chave] = time.time()
+
+    n = 8
+    largada = threading.Barrier(n)
+    erros = []
+
+    def leitor():
+        largada.wait(timeout=10)
+        for _ in range(50):
+            try:
+                pm.get_param('app_teste', 'chave')
+            except Exception as e:  # pragma: no cover
+                erros.append(e)
+
+    def limpador():
+        largada.wait(timeout=10)
+        for _ in range(50):
+            try:
+                pm.clear_cache('app_teste', 'chave')
+                pm._param_cache[chave] = {'value': 1, 'type': 'int'}
+                pm._param_cache_timestamp[chave] = time.time()
+            except Exception as e:  # pragma: no cover
+                erros.append(e)
+
+    threads = [
+        threading.Thread(target=leitor if i % 2 else limpador, name=f't{i}')
+        for i in range(n)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert not [t for t in threads if t.is_alive()], 'thread não terminou'
+    assert erros == [], f'exceção escapou para o consumidor: {erros}'

@@ -71,6 +71,20 @@ MODO_LOCAL = 'local'
 MODOS_VALIDOS = frozenset({MODO_REMOTO, MODO_LOCAL})
 
 
+class _SemCache:
+    """Sentinela de ausência no cache. Ver `_snapshot_param_cache`."""
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return '<SEM_CACHE>'
+
+
+# `None` não serve como marcador de ausência: é valor cacheável legítimo,
+# porque o servidor pode responder `{'param': null}`.
+SEM_CACHE = _SemCache()
+
+
 class ParamManager:
     _instances: ClassVar[Dict[str, 'ParamManager']] = {}
     # RLock (e não Lock) porque __new__ e __init__ adquirem o mesmo lock
@@ -479,6 +493,41 @@ class ParamManager:
         """
         with self._state_lock:
             return dict(self._cache.get(app, {}))
+
+    def _snapshot_param_cache(self, app_name: str, param_name: str) -> Any:
+        """
+        Devolve o parâmetro do cache específico, ou `SEM_CACHE` (R5-b).
+
+        **Confere validade e lê numa ÚNICA seção crítica**, e é essa a
+        razão de existir. Antes, `get_param` fazia
+        `_is_param_cache_valid(...)` — que adquire e SOLTA o
+        `_state_lock` — e só então `self._param_cache[key]`. Um
+        `clear_cache(app, param)` concorrente, disparado por
+        `delete_param` ou por `upsert_params`, remove a chave na janela
+        entre as duas, e o `KeyError` **escapava para a aplicação
+        consumidora** — contrariando o contrato de que leitura devolve
+        valor ou `None`, nunca levanta.
+
+        Devolve a sentinela, e não `None`, porque `None` é valor
+        cacheável legítimo: o servidor pode responder `{'param': null}`.
+        Confundir "não está no cache" com "está e vale None" faria a
+        leitura ir à rede à toa.
+
+        O critério de validade é o mesmo de `_is_param_cache_valid`, que
+        continua existindo para o `get_cache_info` — lá só se relata a
+        validade, sem ler o valor depois, então não há janela.
+        """
+        param_cache_key = f'{app_name}:{param_name}'
+        with self._state_lock:
+            if (
+                param_cache_key not in self._param_cache
+                or param_cache_key not in self._param_cache_timestamp
+            ):
+                return SEM_CACHE
+            cache_time = self._param_cache_timestamp[param_cache_key]
+            if (time.time() - cache_time) >= self._cache_duration:
+                return SEM_CACHE
+            return self._param_cache[param_cache_key]
 
     def _publish_cache(
         self, app: str, params: Dict[str, Any], started_at: float
@@ -1448,15 +1497,16 @@ class ParamManager:
                 return None
             return _extract_value(registro.get('payload') or {})
 
-        # Verifica cache específico
-        if self._is_param_cache_valid(app_name, param_name):
+        # Cache específico: conferir e ler numa única seção crítica.
+        # Separar as duas etapas é o defeito R5-b — ver
+        # _snapshot_param_cache.
+        em_cache = self._snapshot_param_cache(app_name, param_name)
+        if em_cache is not SEM_CACHE:
             logger.info(
                 f'Usando cache específico para o parâmetro:'
                 f' {param_name} do app: {app_name}'
             )
-            return ParamManager._extract_value(
-                self._param_cache[param_cache_key]
-            )
+            return ParamManager._extract_value(em_cache)
         if self._is_cache_valid(app_name):
             logger.info(
                 f'Usando cache global do app para o parâmetro: {param_name}'
