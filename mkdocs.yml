@@ -6,6 +6,8 @@ nav:
       - Introdução: primeiros_passos.md
       - Instalação: instalacao.md
       - Tutorial: tutorial.md
+  - Modo local: modo_local.md
+  - Contribuindo: contribuindo.md
   - Alterações: changelog.md
   - Estrutura: estrutura.md
 
@@ -62,6 +64,10 @@ extra_javascript:
   - assets/js/LogoAnimation.js
 
 markdown_extensions:
+  # Sem esta, os blocos `!!! warning` saem como texto cru na página e o
+  # build passa no --strict do mesmo jeito. Conferir o render, não só o
+  # build.
+  - admonition
   - pymdownx.highlight
   - pymdownx.snippets
   - attr_list

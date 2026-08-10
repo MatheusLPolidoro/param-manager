@@ -61,8 +61,16 @@ param_manager = ParamManager.get_instance(
 Crie o arquivo:
 
 ```
-PARAM_MANAGER_USERNAME=admin
-PARAM_MANAGER_PASSWORD=MinhaSenhaUltraSegura
+PARAMS_USERNAME=admin
+PARAMS_PASSWORD=MinhaSenhaUltraSegura
+```
+
+Para configurar uma instância específica, prefixe com o nome dela — o
+valor prefixado tem precedência sobre o global:
+
+```
+FINANCEIRO_PARAMS_USERNAME=admin
+FINANCEIRO_PARAMS_PASSWORD=MinhaSenhaUltraSegura
 ```
 
 E inicialize:
@@ -103,21 +111,25 @@ param_manager.delete_param("financeiro", "limite_diario")
 
 ## 🟧 Atualizar Apenas um Campo
 
+Use o próprio `upsert_params`: informe só o que muda, e os metadados já
+gravados são preservados.
+
 ```python
-param_manager.update_param(
+param_manager.upsert_params(
     "financeiro",
     "limite_diario",
-    value=7500
+    value=7500,
+    param_type="int",
 )
 ```
 
 ---
 
-## 🟦 Obter Schema de um Parâmetro
+## 🟦 Listar Aplicações
 
 ```python
-schema = param_manager.get_param_schema("financeiro", "limite_diario")
-print(schema)
+param_manager.list_apps()
+# {'apps': [...]}
 ```
 
 ---
@@ -132,11 +144,20 @@ print(schema)
 
 ## 📂 Armazenamento Local
 
-O Param Manager salva fallback em:
+O Param Manager salva o fallback num arquivo por instância:
 
 ```
-param_manager/params_db.json
+<base>/param_manager/<instancia>/params_<instancia>.json
 ```
+
+Para a instância padrão, isso é
+`param_manager/default/params_default.json`. A `<base>` vem de
+`local_db_path`, da variável `LOCAL_DB_PATH` ou do diretório do `.env`,
+nessa ordem.
+
+Se você trabalha sem servidor, veja também o
+[modo local](modo_local.md), que usa um segundo arquivo — separado deste
+— para os parâmetros que você ainda não sincronizou.
 
 ---
 
