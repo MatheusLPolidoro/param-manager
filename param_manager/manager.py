@@ -35,8 +35,16 @@ from param_manager.errors import (  # noqa: F401
 from param_manager.local_store import (
     ESTADO_DIRTY,
     ESTADO_DRAFT,
+    ESTADO_REJECTED,
+    ESTADO_SYNCED,
     LocalStore,
     LocalStoreError,
+    payload_hash,
+)
+from param_manager.sync import (
+    ACAO_CONFLITO,
+    itens_aplicaveis,
+    montar_plano,
 )
 from param_manager.type_catalog import CATALOGO_EMBARCADO, validar_advisory
 
@@ -879,6 +887,180 @@ class ParamManager:
             )
             return {}
 
+    def _exigir_modo_local(self, operacao: str) -> None:
+        if self._mode != MODO_LOCAL:
+            raise LocalStoreError(
+                f'{operacao} só existe no modo local: em modo remoto não '
+                f'há rascunho para sincronizar.'
+            )
+
+    def sync_plan(self, app_name: str | None = None) -> Dict[str, Any]:
+        """
+        FASE 1: calcula o que a sincronização faria. **Não grava nada.**
+
+        Duas fases, e não uma, porque conflito não é decisão da
+        biblioteca. O plano é serializável de propósito — é ele que uma
+        tela de diff consome.
+
+        Rede acontece aqui, e **fora de qualquer lock**: segurar lock
+        durante o round-trip congelaria toda leitura de cache da
+        aplicação hospedeira pela sincronização inteira.
+        """
+        self._exigir_modo_local('sync_plan')
+
+        # (1) snapshot do que está pendente, sob o lock, e solta.
+        pendentes = self._local_store.pendentes(app_name)
+        apps_envolvidos = sorted({r['app'] for r in pendentes})
+
+        # (2) rede, sem lock nenhum na mão.
+        # Do SERVIDOR, não de list_apps(): em modo local aquele devolve
+        # os apps do sidecar, e o plano concluiria que um app criado
+        # offline já existe lá.
+        apps_remotos = {
+            app.get('name')
+            for app in (self._listar_apps_remotos().get('apps') or [])
+            if isinstance(app, dict)
+        }
+        remotos_por_app: Dict[str, Any] = {}
+        for app in apps_envolvidos:
+            if app not in apps_remotos:
+                remotos_por_app[app] = {}
+                continue
+            try:
+                remotos_por_app[app] = self._fetch_from_api(
+                    app, save_cache=False
+                )
+            except ParamNotFoundError:
+                # App existe mas ainda não tem parâmetro nenhum.
+                remotos_por_app[app] = {}
+
+        return montar_plano(pendentes, remotos_por_app, apps_remotos)
+
+    def sync_apply(self, plano: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        FASE 2: aplica **apenas** o que o plano marcou como aplicável.
+
+        Conflito nunca é aplicado. Apps sempre antes de parâmetros: um
+        PUT em app inexistente responde 404.
+
+        É retomável e idempotente, porque a unidade é o parâmetro e o
+        estado mora por parâmetro: um crash no meio deixa um conjunto
+        parcialmente sincronizado que a execução seguinte termina.
+
+        Os três caminhos de recusa são distintos de propósito. 422 é dado
+        errado, 403 é credencial, 404 é app faltando — colapsá-los num
+        só faria o front dizer "parâmetro inválido" para quem, na
+        verdade, não tem permissão.
+        """
+        self._exigir_modo_local('sync_apply')
+
+        resultado: Dict[str, Any] = {
+            'apps_created': [],
+            'synced': [],
+            'rejected': [],
+            'forbidden': [],
+            'failed': [],
+            'skipped_conflicts': [
+                {'app': i['app'], 'name': i['name'], 'reason': i['reason']}
+                for i in (plano.get('params') or [])
+                if i.get('action') == ACAO_CONFLITO
+            ],
+        }
+
+        for app in plano.get('apps_to_create') or []:
+            try:
+                self._criar_app_remoto(app)
+                resultado['apps_created'].append(app)
+            except Exception as e:
+                # Sem o app, nenhum parâmetro dele sobe. Registrar e
+                # seguir para os outros apps é melhor do que abortar a
+                # sincronização inteira por causa de um.
+                resultado['failed'].append({'app': app, 'error': str(e)})
+
+        falhos = {f.get('app') for f in resultado['failed']}
+        for item in itens_aplicaveis(plano):
+            if item['app'] in falhos:
+                continue
+            self._aplicar_item(item, resultado)
+
+        return resultado
+
+    def _criar_app_remoto(self, app_name: str) -> None:
+        """POST do app no servidor, com a descrição guardada localmente."""
+        registro = self._local_store.get_app(app_name) or {}
+        url = f'{self._api_base_url}/parameters/apps/'
+        res = requests.post(
+            url,
+            json={
+                'name': app_name,
+                'description': registro.get('description'),
+            },
+            headers=self._auth_headers(),
+            timeout=self._timeout,
+        )
+        if res.status_code != HTTPStatus.CREATED:
+            raise Exception(f'Erro ao criar app: {res.text}')
+        self._local_store.marcar_app_sincronizado(app_name)
+
+    def _aplicar_item(
+        self, item: Dict[str, Any], resultado: Dict[str, Any]
+    ) -> None:
+        """Empurra um parâmetro e reconcilia o estado local."""
+        app, nome = item['app'], item['name']
+        url = f'{self._api_base_url}/parameters/apps/{app}/params/'
+        try:
+            res = requests.put(
+                url,
+                json={nome: item['local']},
+                headers=self._auth_headers(),
+                timeout=self._timeout,
+            )
+        except Exception as e:
+            resultado['failed'].append(
+                {'app': app, 'name': nome, 'error': str(e)}
+            )
+            return
+
+        if res.status_code == HTTPStatus.OK:
+            # A versão canônica é a do servidor: ela volta cifrada e com
+            # os metadados completos. Manter a do cliente como
+            # autoritativa depois de uma sincronia bem-sucedida faria o
+            # base_hash nascer errado e o próximo plano ver conflito.
+            doc = (res.json().get('params') or {}).get(nome)
+            self._local_store.marcar(
+                app,
+                nome,
+                ESTADO_SYNCED,
+                base_hash=payload_hash(doc) if doc is not None else None,
+            )
+            resultado['synced'].append({'app': app, 'name': nome})
+            return
+
+        detalhe = res.text
+        if res.status_code == HTTPStatus.FORBIDDEN:
+            # Credencial, não dado. O parâmetro fica pendente: tentar de
+            # novo com a credencial certa resolve, e marcá-lo como
+            # rejeitado faria parecer que o valor está errado.
+            resultado['forbidden'].append({
+                'app': app,
+                'name': nome,
+                'error': detalhe,
+            })
+            return
+
+        # 422 e o resto: o parâmetro PERMANECE no store, com o detalhe do
+        # servidor verbatim. Descartá-lo em silêncio apagaria o trabalho
+        # de quem o escreveu, e resumir o erro tiraria a única informação
+        # que diz o que corrigir.
+        self._local_store.marcar(
+            app, nome, ESTADO_REJECTED, last_error=detalhe
+        )
+        resultado['rejected'].append({
+            'app': app,
+            'name': nome,
+            'error': detalhe,
+        })
+
     def _type_catalog(self) -> Dict[str, Any]:
         """
         Catálogo em uso: o guardado do servidor, senão o embarcado.
@@ -939,7 +1121,18 @@ class ParamManager:
         """
         if self._mode == MODO_LOCAL:
             return {'apps': self._local_store.list_apps()}
+        return self._listar_apps_remotos()
 
+    def _listar_apps_remotos(self) -> Dict[str, Any]:
+        """
+        Lista os apps do SERVIDOR, independentemente do modo.
+
+        Existe separado de `list_apps` porque a sincronização precisa
+        justamente do outro lado: em modo local, `list_apps` devolve os
+        apps do sidecar, e usá-lo no plano faria o cliente concluir que
+        um app criado offline já existe no servidor — e então buscar
+        parâmetros de um app que não está lá.
+        """
         url = f'{self._api_base_url}/parameters/apps/'
         res = requests.get(
             url,
