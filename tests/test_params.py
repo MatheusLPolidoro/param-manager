@@ -1098,8 +1098,13 @@ def test_process_parameters_sobrevive_mutacao_do_cache(setup_param_manager):
             pm._cache['finance']['C'] = {'type': 'int', 'value': 3}
         return original(param)
 
-    with patch.object(
-        ParamManager, '_process_parameter', side_effect=muta_na_primeira_chave
+    # Alvo é o módulo, não a classe: _process_parameters passou a viver
+    # em param_manager.crypto e resolve _process_parameter pelo global do
+    # próprio módulo, então patch.object(ParamManager, ...) não
+    # intercepta mais. A race aferida é a mesma.
+    with patch(
+        'param_manager.crypto._process_parameter',
+        side_effect=muta_na_primeira_chave,
     ):
         resultado = pm.get_all_params('finance')
 

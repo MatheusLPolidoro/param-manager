@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import logging
 import os
@@ -12,12 +11,27 @@ from http import HTTPStatus
 from typing import Any, ClassVar, Dict, Optional, Tuple
 
 import requests
-from Crypto.Cipher import AES
-from Crypto.Hash import SHA256
-from Crypto.Protocol.KDF import PBKDF2
 from dotenv import find_dotenv, load_dotenv
 from requests.exceptions import ConnectionError, Timeout
 from tinydb import TinyDB
+
+# Reexportados: `from param_manager.manager import ParamNaoEncontradoError`
+# é o caminho que o __init__ e código de terceiros usam desde antes da
+# decomposição. Mover a definição sem reexportar seria quebra.
+from param_manager.crypto import (  # noqa: F401
+    ENVELOPE_KEYS,
+    SENSITIVE_TYPES,
+    _decrypt_param,
+    _extract_value,
+    _is_encrypted_param,
+    _is_envelope,
+    _process_parameter,
+    _process_parameters,
+)
+from param_manager.errors import (  # noqa: F401
+    ParamNaoEncontradoError,
+    ParamNotFoundError,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -25,35 +39,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger('ParamManager')
 
-# Tipos cujo valor trafega cifrado entre a API e esta biblioteca.
-SENSITIVE_TYPES = frozenset({'secret', 'user', 'users'})
-
-# Chaves obrigatórias do envelope criptográfico. Contrato congelado com o
-# servidor — ver a documentação do fast-param-manager antes de alterar.
-ENVELOPE_KEYS = ('salt', 'master_key', 'crypto_data')
-
 # Posicao de instance_name na assinatura posicional de __init__.
 INSTANCE_NAME_ARG_POSITION = 6
-
-
-def _is_envelope(value: Any) -> bool:
-    """Diz se o valor é um envelope criptográfico íntegro."""
-    return isinstance(value, dict) and all(
-        key in value for key in ENVELOPE_KEYS
-    )
-
-
-class ParamNotFoundError(Exception):
-    """Levantada quando um parâmetro retorna 404 (não encontrado)."""
-
-    pass
-
-
-# Alias de compatibilidade. O nome em português é o que foi publicado no
-# PyPI e está em uso em código de terceiros; como é a MESMA classe, e não
-# uma subclasse, `except ParamNaoEncontradoError` continua capturando o
-# que esta biblioteca levanta. Não remover sem uma major.
-ParamNaoEncontradoError = ParamNotFoundError
 
 
 class ParamManager:
@@ -939,148 +926,18 @@ class ParamManager:
 
         return res.json()
 
-    @staticmethod
-    def _is_encrypted_param(param: Any) -> bool:
-        """
-        Diz se um parâmetro sensível ainda está com o valor cifrado.
+    # As cinco staticmethods abaixo viraram delegações para
+    # `param_manager.crypto` na decomposição. Ficam aqui porque
+    # `ParamManager._process_parameter` e afins são chamados por toda a
+    # classe e pela suíte; apagá-las seria mudança de superfície, não
+    # movimentação de código.
+    _is_encrypted_param = staticmethod(_is_encrypted_param)
+    _process_parameters = staticmethod(_process_parameters)
 
-        Parâmetros de tipo não sensível são sempre considerados seguros
-        para persistir.
-        """
-        if not isinstance(param, dict):
-            return True
+    _process_parameter = staticmethod(_process_parameter)
+    _extract_value = staticmethod(_extract_value)
 
-        param_type = param.get('type')
-        value = param.get('value')
-
-        if param_type == 'secret':
-            return _is_envelope(value)
-        if param_type == 'user':
-            return isinstance(value, dict) and _is_envelope(
-                value.get('password')
-            )
-        if param_type == 'users':
-            return isinstance(value, list) and all(
-                isinstance(item, dict) and _is_envelope(item.get('password'))
-                for item in value
-            )
-        return True
-
-    @staticmethod
-    def _process_parameters(params: dict) -> dict:
-        """
-        Devolve os parâmetros com os valores sensíveis decifrados.
-
-        Para `secret`, `user` e `users` devolve uma cópia profunda — é
-        o que garante que o texto claro nunca alcance o cache nem o
-        banco local. Tipos não sensíveis são devolvidos POR REFERÊNCIA:
-        o dict retornado é o mesmo objeto guardado em `self._cache`, e
-        mutá-lo altera o cache do processo.
-        """
-        return {
-            key: ParamManager._process_parameter(param)
-            for key, param in params.items()
-        }
-
-    @staticmethod
-    def _process_parameter(params: dict) -> dict | None:
-        """
-        Decifra um parâmetro sensível devolvendo uma cópia.
-
-        Tipos fora de SENSITIVE_TYPES são devolvidos como vieram, sem
-        cópia — ver a nota de aliasing em `_process_parameters`.
-        """
-        if not isinstance(params, dict):
-            return params
-
-        if params.get('type') not in SENSITIVE_TYPES:
-            return params
-
-        params = copy.deepcopy(params)
-
-        if params.get('type') == 'secret':
-            raw = params.get('value')
-            if isinstance(raw, dict):
-                params['value'] = ParamManager._decrypt_param(raw)
-        elif params.get('type') == 'users':
-            raw = params.get('value')
-            if isinstance(raw, list):
-                for item in raw:
-                    if isinstance(item, dict) and isinstance(
-                        item.get('password'), dict
-                    ):
-                        item['password'] = ParamManager._decrypt_param(
-                            item['password']
-                        )
-        elif params.get('type') == 'user':
-            raw = params.get('value')
-            if isinstance(raw, dict):
-                if isinstance(raw.get('password'), dict):
-                    raw['password'] = ParamManager._decrypt_param(
-                        raw['password']
-                    )
-        return params
-
-    @staticmethod
-    def _extract_value(param_value: dict) -> Any:
-        if not isinstance(param_value, dict):
-            return None
-        if param_value.get('type') in SENSITIVE_TYPES:
-            param_value = ParamManager._process_parameter(param_value)
-        return param_value.get('value')
-
-    @staticmethod
-    def _decrypt_param(value: dict) -> str | None:
-        try:
-            if not all(
-                k in value for k in ['salt', 'master_key', 'crypto_data']
-            ):
-                return None
-
-            app_custody_key = os.getenv('CHAVE_CUSTODIA_APP') or os.getenv(
-                'APP_CUSTODY_KEY'
-            )
-            if not app_custody_key:
-                logger.error(
-                    '🔐 CHAVE_CUSTODIA_APP não está definida no ambiente.'
-                )
-                return None
-
-            salt = bytes.fromhex(value['salt'])
-            custody_key = PBKDF2(
-                app_custody_key.encode(),
-                salt,
-                dkLen=32,
-                count=100_000,
-                hmac_hash_module=SHA256,
-            )
-
-            cm_iv = bytes.fromhex(value['master_key']['iv'])
-            cm_tag = bytes.fromhex(value['master_key']['tag'])
-
-            cm_data = bytes.fromhex(
-                value['master_key'].get('data')
-                or value['master_key'].get('dado')
-            )
-
-            cipher_cm = AES.new(custody_key, AES.MODE_GCM, cm_iv)
-            master_key = cipher_cm.decrypt_and_verify(cm_data, cm_tag)
-
-            pw_iv = bytes.fromhex(value['crypto_data']['iv'])
-            pw_tag = bytes.fromhex(value['crypto_data']['tag'])
-            pw_data = bytes.fromhex(
-                value['crypto_data'].get('data')
-                or value['crypto_data'].get('dado')
-            )
-            cipher_pw = AES.new(master_key, AES.MODE_GCM, pw_iv)
-            password = cipher_pw.decrypt_and_verify(pw_data, pw_tag)
-
-            return password.decode()
-        except Exception as e:
-            logger.error(
-                f'Erro ao descriptografar parâmetro secreto: {str(e)}'
-            )
-            return None
+    _decrypt_param = staticmethod(_decrypt_param)
 
     def get_all_params(self, app_name: str) -> Dict[str, Any]:
         logger.info(f'Solicitando todos os parâmetros para o app: {app_name}')
