@@ -1,1 +1,0 @@
-Omita `user_editable` do payload quando o chamador não informa o campo, permitindo ao servidor distinguir "não enviado" de "enviado como falso" e liberar a edição de parâmetros marcados como editáveis por usuário comum.

@@ -1,1 +1,0 @@
-A auditoria de vulnerabilidades passa a rodar na versão mínima de Python suportada, e não na mais recente: é ali que as dependências resolvem para as versões mais antigas, onde as falhas conhecidas estão.

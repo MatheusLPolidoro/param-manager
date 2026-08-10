@@ -1,7 +1,7 @@
 [project]
 name = "param-manager"
-version = "0.4.3"
-description = "Biblioteca para gerenciamento de parâmetros com padrão Singleton,cache e armazenamento local usando TinyDB."
+version = "0.5.0"
+description = "Biblioteca para gerenciamento de parâmetros, com cache, armazenamento local em TinyDB e modo de desenvolvimento sem servidor."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"
 # Piso 3.10: python-dotenv 1.2.2, que corrige a PYSEC-2026-2270, exige
@@ -68,7 +68,11 @@ filename = "CHANGELOG.md"
 directory = "chanlogs.d"
 underlines = ["=", "-", "~"]
 title_format = "Versão {version} ({project_date})"
-issue_format = "[#{issue}](https://github.com/seu_usuario/seu_repo/issues/{issue})"
+# URL do GitHub, e não do GitLab interno: o CHANGELOG desta biblioteca
+# vai junto para o PyPI, e um link para `gitlab.127.0.0.1.nip.io` não
+# resolve na máquina de ninguém. É o mesmo endereço já declarado em
+# [project.urls].Bug Tracker. O anterior era `seu_usuario/seu_repo`.
+issue_format = "[#{issue}](https://github.com/MatheusLPolidoro/param-manager/issues/{issue})"
 
 [[tool.towncrier.type]]
 directory = "breaking"

@@ -1,1 +1,0 @@
-Eleve a versão mínima de Python para 3.10. A correção da vulnerabilidade PYSEC-2026-2270 está em uma versão do `python-dotenv` publicada apenas para 3.10 ou superior; as versões alcançáveis em 3.8 e 3.9 continuam expostas, e mantê-las significaria distribuir a falha.
