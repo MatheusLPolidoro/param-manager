@@ -1,1 +1,0 @@
-Elimina race conditions no acesso ao cache em memória: iterações seguras durante modificação concorrente, atualização atômica (CAS) do cache e do circuit breaker, e impossibilidade de resposta atrasada sobrescrever dado mais recente.

@@ -1,1 +1,0 @@
-Inclua o parâmetro `verify_ssl` para controlar a verificação de certificado TLS nas leituras, com precedência construtor > `{INSTANCIA}_VERIFY_SSL` > `VERIFY_SSL`. O padrão continua desligado, por conta dos ambientes com certificado interno.

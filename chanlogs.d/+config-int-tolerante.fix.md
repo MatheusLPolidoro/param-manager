@@ -1,1 +1,0 @@
-Valores inválidos ou vazios de `CACHE_DURATION` e `TIMEOUT` passam a ser ignorados com aviso, em vez de impedir a criação do gerenciador. Antes o erro subia durante a construção e deixava no lugar uma instância inutilizável, cujo uso seguinte falhava com uma mensagem sem relação com a causa. Um `CACHE_DURATION` negativo continua desligando o cache, como já acontecia.

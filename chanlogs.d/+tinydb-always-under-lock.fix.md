@@ -1,1 +1,0 @@
-Corrija a corrupção do cache local sob uso concorrente. Em uma aplicação com várias threads, a limpeza de uma tabela simultânea a uma gravação podia truncar o arquivo do cache e derrubar o conteúdo de todos os aplicativos — justamente durante a indisponibilidade da API, que é quando esse cache é a única fonte de dados restante.

@@ -1,1 +1,0 @@
-Limpe também o cache em memória do parâmetro ao apagá-lo por `delete_param`: o valor excluído — possivelmente uma credencial revogada — continuava sendo devolvido por `get_param` até o fim da janela de cache.
