@@ -1,0 +1,210 @@
+/*
+ * Tokens — a única camada que declara cor.
+ *
+ * Três estados, não dois: escolha explícita carimba `data-theme` na raiz,
+ * e o padrão "sistema" não carimba nada, caso em que só o
+ * `prefers-color-scheme` separa claro de escuro. Por isso o `:root` nu
+ * define a paleta clara COMPLETA, a media query redefine só os tokens
+ * (guardada contra uma escolha explícita de claro), e `[data-theme=dark]`
+ * redefine de novo para o botão ganhar nos dois sentidos.
+ *
+ * Nenhum componente declara cor dentro de media query. Uma cor cuja única
+ * definição mora atrás de `[data-theme]` simplesmente não se aplica no
+ * estado sem carimbo — que é o estado da maioria.
+ *
+ * Neutros com viés frio levíssimo na direção do acento: cinza puro lê
+ * como não-escolhido. O acento é gasto num lugar só — o que está ativo.
+ * Cor de estado é outra família, e nunca conta como acento.
+ */
+
+:root {
+  /*
+   * `color-scheme` é o que pinta as barras de rolagem, os campos de
+   * data e os controles nativos. **Sem ele o tema escuro fica com
+   * scrollbar branca**, porque a webview continua achando que a página
+   * é clara — nenhuma cor de CSS alcança esse desenho.
+   *
+   * Acompanha os tokens nos três estados, pelo mesmo motivo que eles:
+   * declarado só aqui, a escolha explícita de tema não o alteraria.
+   */
+  color-scheme: light;
+
+  /* --- superfícies e tinta (claro) ---
+   * Neutros com viés frio levíssimo na direção do acento. Contrastes
+   * medidos sobre `--surface`: --ink 15.8:1, --ink-muted 7.1:1,
+   * --ink-faint 4.6:1. O tom apagado só é usado em texto de apoio de
+   * 13px ou maior, onde 4.5:1 é o piso de AA.
+   */
+  --ground: #eef0f4;
+  --surface: #ffffff;
+  --surface-sunken: #f5f6f9;
+  --border: #d5dae3;
+  --border-strong: #a8b0bf;
+  --ink: #14171d;
+  --ink-muted: #4a5260;
+  --ink-faint: #6b7280;
+
+  /* --- acento ---
+   * O roxo é o da marca (`marca.svg`, a mesma do site de documentação),
+   * e não uma cor escolhida à parte: identidade visual que muda entre o
+   * produto e a documentação não é identidade.
+   *
+   * #5e35b1 dá 8.0:1 sobre branco, com folga para o texto do botão
+   * primário e para o anel de foco, que são os dois lugares onde ele
+   * carrega leitura.
+   */
+  --accent: #5e35b1;
+  --accent-ink: #ffffff;
+  --accent-soft: #f0eaf9;
+  --accent-border: #cbb7e8;
+  --accent-hover: #4a2a8d;
+  /* Zebra e realces derivados do roxo, diluídos a ponto de não competir
+     com o texto: 3% no claro, 4% no escuro. */
+  --zebra: #faf8fd;
+  --code-bg: #f7f5fb;
+
+  /* Realce de código. Cinco tons, todos acima de 4.5:1 sobre --code-bg,
+     e escolhidos em torno do roxo da marca para o editor não parecer de
+     outro produto. */
+  --cod-a: #6b2fa8;
+  --cod-b: #1b6b52;
+  --cod-c: #9a4a10;
+  --cod-d: #1f4fa8;
+  --cod-e: #a3234b;
+
+  /* --- estados de sincronização ---
+   * Família própria, separada do acento. Cada um passa 4.5:1 sobre o
+   * respectivo `-soft`, que é onde o chip os pinta.
+   */
+  --state-synced: #1f6a4a;
+  --state-synced-soft: #e0f0e8;
+  --state-pending: #7d5507;
+  --state-pending-soft: #fbf0d9;
+  --state-blocked: #a32d21;
+  --state-blocked-soft: #fbe6e3;
+
+  --shadow: 0 1px 2px rgb(20 23 29 / 10%), 0 10px 30px rgb(20 23 29 / 10%);
+
+  /* --- tipografia ---
+   * Base subiu de 14px para 15px e a mono para 0.9375rem. Num app de
+   * mesa lido por horas, o par 13/14px pedia aproximação da tela.
+   */
+  --font-ui: 'IBM Plex Sans', 'Segoe UI', system-ui, -apple-system,
+    'Helvetica Neue', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', 'SFMono-Regular', Consolas,
+    'Liberation Mono', monospace;
+
+  --size-xs: 0.75rem;
+  --size-sm: 0.875rem;
+  --size-md: 0.9375rem;
+  --size-lg: 1.0625rem;
+  --size-xl: 1.3125rem;
+  --size-2xl: 1.625rem;
+
+  /* --- espaço e forma --- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --rail: 240px;
+  --detail: 380px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --ground: #101319;
+    --surface: #191d24;
+    --surface-sunken: #14181e;
+    --border: #2e343e;
+    --border-strong: #4b525f;
+    --ink: #eef0f4;
+    --ink-muted: #a8b0be;
+    --ink-faint: #838b99;
+
+    --accent: #b9a3e3;
+    --accent-ink: #101319;
+    --accent-soft: #2a2140;
+    --accent-border: #4b3a6e;
+    --accent-hover: #cdbcec;
+    --zebra: #1c1a26;
+    --code-bg: #15131d;
+
+    --cod-a: #c4a2f5;
+    --cod-b: #6fd0a5;
+    --cod-c: #e8b06a;
+    --cod-d: #85b4f0;
+    --cod-e: #f090ac;
+
+    --state-synced: #5cc194;
+    --state-synced-soft: #16291f;
+    --state-pending: #e0ac4a;
+    --state-pending-soft: #2b2412;
+    --state-blocked: #ef8a7d;
+    --state-blocked-soft: #331b18;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 10px 30px rgb(0 0 0 / 45%);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ground: #101319;
+  --surface: #191d24;
+  --surface-sunken: #14181e;
+  --border: #2e343e;
+  --border-strong: #4b525f;
+  --ink: #eef0f4;
+  --ink-muted: #a8b0be;
+  --ink-faint: #838b99;
+
+  --accent: #b9a3e3;
+  --accent-ink: #101319;
+  --accent-soft: #2a2140;
+  --accent-border: #4b3a6e;
+  --accent-hover: #cdbcec;
+  --zebra: #1c1a26;
+  --code-bg: #15131d;
+
+  --cod-a: #c4a2f5;
+  --cod-b: #6fd0a5;
+  --cod-c: #e8b06a;
+  --cod-d: #85b4f0;
+  --cod-e: #f090ac;
+
+  --state-synced: #5cc194;
+  --state-synced-soft: #16291f;
+  --state-pending: #e0ac4a;
+  --state-pending-soft: #2b2412;
+  --state-blocked: #ef8a7d;
+  --state-blocked-soft: #331b18;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 50%), 0 10px 30px rgb(0 0 0 / 45%);
+}
+
+/*
+ * As faces são referenciadas por `local()`: o wheel não carrega binários
+ * de fonte, e um `url()` para CDN não resolveria num app offline — nem
+ * passaria pela CSP de `font-src 'self'`. Quem tem IBM Plex instalado vê
+ * o par escolhido; quem não tem cai na pilha de sistema, que é legível e
+ * não muda o layout, porque a escala e o espaçamento vivem nos tokens.
+ */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  src: local('IBM Plex Sans'), local('IBMPlexSans');
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400 600;
+  src: local('IBM Plex Mono'), local('IBMPlexMono');
+  font-display: swap;
+}

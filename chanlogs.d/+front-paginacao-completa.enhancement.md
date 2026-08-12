@@ -1,0 +1,1 @@
+A paginação passou a numerar as páginas e a permitir escolher quantas linhas exibir. Listas, dicionários e usuários dentro de um parâmetro também paginam, em vez de crescer até empurrar os botões para fora da tela.

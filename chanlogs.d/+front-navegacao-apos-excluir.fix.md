@@ -1,0 +1,1 @@
+Excluir uma aplicação deixa de manter aberto o painel de um parâmetro que já não existe. Trocar de aplicação também descarta a edição em andamento, que antes seguia oferecendo salvar num parâmetro de outro lugar.

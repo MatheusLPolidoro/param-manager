@@ -1,0 +1,391 @@
+<!doctype html>
+<!--
+  Nenhuma string de interface mora aqui: tudo é `data-i18n` e é preenchido
+  na subida. O `lang` inicial é pt-BR e o JavaScript o corrige assim que
+  sabe o idioma escolhido — é ele que o leitor de tela usa para escolher a
+  pronúncia.
+-->
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>param-manager</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#conteudo" data-i18n="a11y.pularParaConteudo"></a>
+
+    <div class="app-shell">
+      <header class="app-header">
+        <!--
+          Os dois vivem no cabeçalho, e não na trilha: um botão que
+          esconde a trilha não pode morar dentro dela — recolhida, ele
+          sumiria junto e não haveria como reabrir.
+
+          `btn-rail` abre a gaveta nas larguras estreitas; `btn-recolher-rail`
+          recolhe a coluna nas largas. São estados diferentes do mesmo
+          elemento, e cada um só aparece na sua faixa.
+        -->
+        <button
+          class="btn btn--ghost btn--icone btn-rail"
+          type="button"
+          id="btn-rail"
+          aria-controls="rail"
+          aria-expanded="false"
+          data-i18n-attr="title:apps.abrirLista, aria-label:apps.abrirLista"
+        ></button>
+        <button
+          class="btn btn--ghost btn--icone btn-recolher"
+          type="button"
+          id="btn-recolher-rail"
+          aria-controls="rail"
+          aria-expanded="true"
+        ></button>
+
+        <div class="app-header__title">
+          <img class="marca" src="marca.svg" alt="" width="28" height="28" />
+          <h1>param-manager</h1>
+          <span class="app-header__version" data-i18n="app.subtitulo"></span>
+        </div>
+
+        <div class="app-header__spacer"></div>
+
+        <div class="app-header__controls">
+          <label class="sr-only" for="seletor-idioma" data-i18n="prefs.idioma"></label>
+          <select class="select" id="seletor-idioma"></select>
+
+          <button
+            class="btn btn--ghost btn--icone"
+            type="button"
+            id="btn-tema"
+          ></button>
+        </div>
+      </header>
+
+      <div class="app-body" id="app-body" data-detail="hidden">
+        <!-- rail de apps -->
+        <nav class="rail" id="rail" aria-labelledby="rail-titulo">
+          <div class="section-title">
+            <h2 class="eyebrow" id="rail-titulo" data-i18n="apps.titulo"></h2>
+            <div class="row">
+              <button
+                class="btn btn--ghost"
+                type="button"
+                id="btn-novo-app"
+                data-i18n-attr="title:apps.novo, aria-label:apps.novo"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <div id="filtro-apps"></div>
+          <div class="rail__scroll">
+            <ul class="rail__list" id="lista-apps"></ul>
+          </div>
+          <div id="rodape-apps"></div>
+          <button
+            class="btn btn--danger"
+            type="button"
+            id="btn-excluir-app"
+            data-i18n="apps.excluir"
+          ></button>
+        </nav>
+
+        <!--
+          Alça de redimensionar. `role="separator"` com `aria-valuenow`
+          porque arrastar não é alcançável sem ponteiro: com foco, as
+          setas movem a divisória.
+        -->
+        <div
+          class="alca-rail"
+          id="alca-rail"
+          role="separator"
+          aria-orientation="vertical"
+          tabindex="0"
+          aria-valuemin="180"
+          aria-valuemax="420"
+          aria-valuenow="240"
+          data-i18n-attr="aria-label:apps.redimensionar, title:apps.redimensionar"
+        ></div>
+
+        <!-- conteúdo -->
+        <main class="content" id="conteudo">
+          <p class="alert alert--error" id="erro-fatal" role="alert" hidden></p>
+
+          <div class="tabs" id="abas" role="tablist">
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-params"
+              aria-controls="painel-params"
+              aria-selected="true"
+              data-i18n="abas.params"
+            ></button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-sync"
+              aria-controls="painel-sync"
+              aria-selected="false"
+              data-i18n="abas.sync"
+            ></button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-tipos"
+              aria-controls="painel-tipos"
+              aria-selected="false"
+              data-i18n="abas.tipos"
+            ></button>
+            <button
+              class="tab"
+              type="button"
+              role="tab"
+              id="tab-sessao"
+              aria-controls="painel-sessao"
+              aria-selected="false"
+              data-i18n="abas.sessao"
+            ></button>
+          </div>
+
+          <!-- parâmetros -->
+          <section
+            class="tabpanel"
+            id="painel-params"
+            role="tabpanel"
+            aria-labelledby="tab-params"
+          >
+            <div class="section-title">
+              <div class="titulo-com-apoio">
+                <h2 id="params-titulo" data-i18n="params.titulo"></h2>
+                <p class="muted" id="app-descricao"></p>
+              </div>
+              <button
+                class="btn btn--primary"
+                type="button"
+                id="btn-novo-param"
+                data-i18n="params.novo"
+              ></button>
+            </div>
+
+            <div id="filtro-params"></div>
+
+            <div class="table-wrap">
+              <table class="table" id="tabela-params" role="grid">
+                <caption class="sr-only" data-i18n="params.tabela.legenda"></caption>
+                <thead>
+                  <tr>
+                    <th scope="col" data-i18n="params.coluna.nome"></th>
+                    <th scope="col" data-i18n="params.coluna.tipo"></th>
+                    <th scope="col" data-i18n="params.coluna.estado"></th>
+                    <th scope="col" data-i18n="params.coluna.atualizado"></th>
+                  </tr>
+                </thead>
+                <tbody id="corpo-params"></tbody>
+              </table>
+              <p class="table__empty" id="params-vazio" hidden></p>
+            </div>
+            <div id="rodape-params"></div>
+          </section>
+
+          <!-- sincronização -->
+          <section
+            class="tabpanel"
+            id="painel-sync"
+            role="tabpanel"
+            aria-labelledby="tab-sync"
+            hidden
+          >
+            <div class="section-title">
+              <h2 data-i18n="sync.titulo"></h2>
+              <div class="btn-row">
+                <button
+                  class="btn"
+                  type="button"
+                  id="btn-calcular-plano"
+                  data-i18n="sync.calcular"
+                ></button>
+                <button
+                  class="btn btn--primary"
+                  type="button"
+                  id="btn-aplicar-plano"
+                  data-i18n="sync.aplicar"
+                ></button>
+              </div>
+            </div>
+            <p class="muted" id="sync-resumo"></p>
+            <div class="stack" id="sync-conteudo"></div>
+          </section>
+
+          <!-- tipos -->
+          <section
+            class="tabpanel"
+            id="painel-tipos"
+            role="tabpanel"
+            aria-labelledby="tab-tipos"
+            hidden
+          >
+            <div class="section-title">
+              <h2 data-i18n="tipos.titulo"></h2>
+              <button
+                class="btn"
+                type="button"
+                id="btn-atualizar-catalogo"
+                data-i18n="tipos.atualizar"
+              ></button>
+            </div>
+            <div class="stack" id="tipos-conteudo"></div>
+          </section>
+
+          <!-- sessão -->
+          <section
+            class="tabpanel"
+            id="painel-sessao"
+            role="tabpanel"
+            aria-labelledby="tab-sessao"
+            hidden
+          >
+            <h2 data-i18n="sessao.titulo"></h2>
+            <div id="sessao-situacao"></div>
+
+            <form class="card stack" id="form-sessao" novalidate>
+              <div class="field">
+                <label class="field__label" for="sessao-instancia" data-i18n="sessao.instancia"></label>
+                <input class="input mono" id="sessao-instancia" name="instancia" />
+                <span class="field__hint" data-i18n="sessao.instancia.dica"></span>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="sessao-modo" data-i18n="sessao.modo"></label>
+                <select class="select" id="sessao-modo">
+                  <option value="remote" data-i18n="modo.remote"></option>
+                  <option value="local" data-i18n="modo.local"></option>
+                </select>
+                <span class="field__hint" data-i18n="sessao.modo.dica"></span>
+              </div>
+
+              <p class="field__hint" id="sessao-dica-local" data-i18n="sessao.dicaLocal" hidden></p>
+
+              <div class="field" data-somente-remoto>
+                <label class="field__label" for="sessao-url" data-i18n="sessao.url"></label>
+                <input class="input" id="sessao-url" type="url" />
+              </div>
+
+              <div class="field" data-somente-remoto>
+                <label class="field__label" for="sessao-usuario" data-i18n="sessao.usuario"></label>
+                <input class="input" id="sessao-usuario" autocomplete="username" />
+              </div>
+
+              <div class="field" data-somente-remoto>
+                <label class="field__label" for="sessao-senha" data-i18n="sessao.senha"></label>
+                <input
+                  class="input"
+                  id="sessao-senha"
+                  type="password"
+                  autocomplete="current-password"
+                />
+                <span class="field__hint" data-i18n="sessao.senha.dica"></span>
+              </div>
+
+              <p class="alert alert--warn" data-i18n="sessao.avisoCustodia"></p>
+
+              <div class="btn-row">
+                <button class="btn btn--primary" type="submit" data-i18n="sessao.conectar"></button>
+              </div>
+            </form>
+          </section>
+        </main>
+
+        <!-- detalhe -->
+        <aside class="detail" id="detalhe" aria-labelledby="detalhe-titulo" hidden>
+          <h2 id="detalhe-titulo"></h2>
+          <div id="detalhe-corpo"></div>
+        </aside>
+      </div>
+
+      <footer class="app-footer">
+        <span class="eyebrow" data-i18n="rodape.instancia"></span>
+        <span class="mono" id="rodape-instancia">—</span>
+        <span class="chip chip--neutral" id="rodape-modo">—</span>
+        <span id="rodape-pendentes"></span>
+        <span class="app-footer__spacer"></span>
+        <span id="rodape-versoes"></span>
+      </footer>
+    </div>
+
+    <!-- diálogos -->
+    <dialog class="dialog" id="dialogo-novo-app" aria-labelledby="novo-app-titulo">
+      <form class="dialog__body" id="form-novo-app" method="dialog">
+        <h2 id="novo-app-titulo" data-i18n="apps.novo.titulo"></h2>
+        <div class="field">
+          <label class="field__label" for="novo-app-nome" data-i18n="apps.campo.nome"></label>
+          <input class="input mono" id="novo-app-nome" required />
+        </div>
+        <div class="field">
+          <label class="field__label" for="novo-app-descricao" data-i18n="apps.campo.descricao"></label>
+          <textarea class="textarea textarea--prosa" id="novo-app-descricao" rows="2"></textarea>
+        </div>
+        <p class="field__hint" data-i18n="apps.campo.nome.dica"></p>
+        <div class="dialog__actions">
+          <button class="btn" type="button" id="btn-cancelar-app" data-i18n="acoes.cancelar"></button>
+          <button class="btn btn--primary" type="submit" data-i18n="acoes.criar"></button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="dialog" id="dialogo-confirmacao" aria-labelledby="confirmacao-titulo">
+      <div class="dialog__body">
+        <div class="dialog__cabecalho">
+          <span data-slot="icone"></span>
+          <h2 id="confirmacao-titulo" data-slot="titulo"></h2>
+        </div>
+        <p class="alert__text" data-slot="texto"></p>
+
+        <form class="field" data-slot="digitar" data-slot-form hidden>
+          <label class="field__hint" for="confirmacao-digitado" data-slot="instrucao"></label>
+          <input class="input mono" id="confirmacao-digitado" data-slot="digitado" autocomplete="off" />
+        </form>
+
+        <div class="dialog__actions">
+          <form method="dialog">
+            <button class="btn" type="submit" data-i18n="acoes.cancelar"></button>
+          </form>
+          <button class="btn btn--primary" type="button" data-slot="ok"></button>
+        </div>
+      </div>
+    </dialog>
+
+    <!--
+      Editor expandido. Existe porque `users`, `user`, `json` e `pattern`
+      não cabem numa coluna de 380px: uma tabela de usuários e um objeto
+      aninhado ficam ilegíveis ali, e editá-los vira adivinhação.
+      O painel lateral continua sendo o caminho normal; isto é o "abrir
+      em tela cheia" para quando o valor pede.
+    -->
+    <dialog class="dialog dialog--largo" id="dialogo-expandido" aria-labelledby="expandido-titulo">
+      <div class="dialog__body">
+        <div class="dialog__cabecalho">
+          <h2 id="expandido-titulo"></h2>
+        </div>
+        <p class="field__hint" id="expandido-dica"></p>
+        <div id="expandido-corpo"></div>
+        <div class="dialog__actions">
+          <button class="btn" type="button" id="btn-expandido-cancelar" data-i18n="acoes.cancelar"></button>
+          <button class="btn btn--primary" type="button" id="btn-expandido-ok" data-i18n="acoes.aplicar"></button>
+        </div>
+      </div>
+    </dialog>
+
+    <!-- anúncios para leitor de tela -->
+    <div class="sr-only" id="live-educado" aria-live="polite" aria-atomic="true"></div>
+    <div class="sr-only" id="live-assertivo" aria-live="assertive" aria-atomic="true"></div>
+    <div class="toasts" id="toasts"></div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>

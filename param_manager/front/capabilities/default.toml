@@ -1,0 +1,13 @@
+# Permissões da janela principal.
+#
+# `pytauri:default` é o que habilita o IPC — sem ele a janela abre e todo
+# `pyInvoke` falha. A lista é deliberadamente curta: este app não abre
+# arquivo, não acessa shell e não fala com a rede pela webview (quem fala
+# com a rede é a lib, do lado Python).
+identifier = "default"
+description = "Capability da janela principal do param-manager"
+windows = ["main"]
+permissions = [
+    "core:default",
+    "pytauri:default",
+]

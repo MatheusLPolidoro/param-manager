@@ -1,0 +1,1 @@
+Conectar uma sessão que já existe, escolhendo outro modo, deixa de anunciar sucesso. O front agora explica que a instância continua no modo anterior e oferece um nome novo para abrir a sessão no modo pedido.

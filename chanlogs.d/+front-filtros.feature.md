@@ -1,0 +1,1 @@
+Aplicações e parâmetros ganharam filtro: digite para buscar por nome, descrição ou tipo, e tecle Enter para fixar o termo como etiqueta — vários termos se acumulam. Parâmetros também filtram por tipo, e o contador mostra quantos de quantos estão à vista.
