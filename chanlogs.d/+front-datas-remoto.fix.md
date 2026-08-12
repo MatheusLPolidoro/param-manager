@@ -1,0 +1,1 @@
+A coluna "atualizado" volta a mostrar a data em modo remoto, e no fuso certo. Ela aparecia como travessão, e antes disso como uma hora no futuro, porque o carimbo do servidor é UTC e vinha sem essa marcação.
