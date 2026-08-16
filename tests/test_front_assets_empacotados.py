@@ -141,6 +141,45 @@ def test_a_config_nao_declara_csp():
     )
 
 
+def test_nenhum_asset_colide_com_a_assinatura_de_tar():
+    """
+    Byte 257 = assinatura `ustar` derruba o módulo inteiro, mudo.
+
+    O protocolo customizado `http://tauri.localhost/` que o
+    `pytauri-wheel` usa no Windows faz sniffing de conteúdo, não só de
+    extensão. Um `.js` cujo byte 257 comece a soletrar `ustar` — a
+    posição canônica da assinatura do formato POSIX/GNU tar — já foi
+    servido como `Content-Type: application/x-tar`, e o WebView2 recusa
+    silenciosamente carregar isso como módulo ES: nenhum `window.onerror`
+    dispara, só o `onerror` do próprio `<script>`, e a falha se propaga
+    para todo módulo que importa (direta ou transitivamente) o arquivo
+    afetado.
+
+    Aconteceu de verdade em `icons.js`: um comentário em português com a
+    palavra "custariam" pousou o `ustar` de "cus**tar**iam" bem no offset
+    257 por coincidência de tamanho do texto acima. Qualquer edição de
+    comentário em qualquer asset pode reintroduzir isso — daí o teste
+    varrer a pasta inteira, não só aquele arquivo.
+    """
+    OFFSET_ASSINATURA_TAR = 257
+    ASSINATURA = b'ustar'
+    colisoes = []
+
+    for caminho in ASSETS.rglob('*'):
+        if caminho.is_dir():
+            continue
+        dados = caminho.read_bytes()
+        se_ustar = dados[OFFSET_ASSINATURA_TAR:OFFSET_ASSINATURA_TAR + 5]
+        if se_ustar == ASSINATURA:
+            colisoes.append(caminho.relative_to(ASSETS).as_posix())
+
+    assert not colisoes, (
+        f'assinatura de tar (`ustar`) no byte {OFFSET_ASSINATURA_TAR} de '
+        f'{colisoes} — o protocolo do pytauri vai servir isso como '
+        f'application/x-tar e o WebView2 recusa carregar como módulo'
+    )
+
+
 def test_a_capability_cobre_a_janela_declarada():
     """
     A janela do `tauri.conf.json` precisa estar na lista da capability.
