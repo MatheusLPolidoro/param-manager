@@ -3,8 +3,8 @@
  *
  * Não há Node nem bundler neste app, e a CSP não pode ser declarada
  * (o `pytauri-wheel` dá panic com ela), então uma folha de sprites
- * externa ou um webfont custariam mais do que valem. Doze traçados
- * resolvem as ações que existem.
+ * externa ou uma fonte de ícones teriam um custo maior do que valem.
+ * Doze traçados resolvem as ações que existem.
  *
  * Três regras que os fazem se comportar:
  *
