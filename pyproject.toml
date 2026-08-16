@@ -16,6 +16,23 @@ dependencies = [
     "python-dotenv==1.2.2"
 ]
 
+[project.optional-dependencies]
+# Front desktop. Fica em extra porque `pytauri-wheel` é um wheel nativo de
+# ~10 MB que liga contra WebView2/gtk: quem só lê parâmetro num servidor
+# não deve pagar por ele.
+#
+# O marcador de versão não é zelo. O `pytauri-wheel` publica wheels POR
+# minor de CPython (cp310..cp313) e não é abi3, então em 3.14 o pip cairia
+# no sdist e exigiria toolchain Rust — falha longa e ilegível no fim de um
+# `pip install`. Com o marcador, o extra simplesmente não resolve ali.
+front = [
+    "pytauri-wheel==0.8.*; python_version < '3.14'",
+    "anyio>=4.0",
+]
+
+[project.scripts]
+param-manager-front = "param_manager.front.__main__:main"
+
 [project.urls]
 "Documentation" = "https://matheuslpolidoro.github.io/param-manager/"
 "Source Code" = "https://github.com/MatheusLPolidoro/param-manager"
@@ -24,8 +41,22 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 
+# Os assets do front são arquivos comuns, não módulos: sem isto o wheel
+# sai com o Python e sem a interface, e o defeito só aparece na máquina de
+# quem instalou.
+[tool.setuptools.package-data]
+"param_manager.front" = [
+    "README.md",
+    "tauri.conf.json",
+    "capabilities/*",
+    "assets/**/*",
+]
+
 [build-system]
-requires = ["setuptools>=61.0,<70"]
+# Piso 62.3, e não 61.0: o glob `**` em package-data só passou a funcionar
+# nessa versão. Num piso menor o build fica verde e o wheel sai sem
+# `assets/js/views/`.
+requires = ["setuptools>=62.3,<70"]
 build-backend = "setuptools.build_meta"
 
 [tool.ruff]

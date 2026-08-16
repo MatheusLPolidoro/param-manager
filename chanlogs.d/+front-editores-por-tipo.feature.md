@@ -1,0 +1,1 @@
+Cada tipo de parâmetro ganhou o editor que lhe cabe: listas e dicionários com linhas que se adicionam e removem, booleano como par de botões, data e hora com o seletor do sistema, referência escolhendo entre os parâmetros que existem no aplicativo, e usuários numa tabela. Digitar JSON à mão deixou de ser necessário fora do tipo `json`.

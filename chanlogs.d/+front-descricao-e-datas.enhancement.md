@@ -1,0 +1,1 @@
+A descrição da aplicação aparece acima da tabela, e o painel de detalhe passa a mostrar aplicação e tipo junto aos demais metadados. As datas são exibidas em linguagem corrente — "há 2 horas" —, com a data exata ao repousar o ponteiro. Criar uma aplicação leva direto para a aba de parâmetros.

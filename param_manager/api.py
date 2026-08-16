@@ -40,9 +40,11 @@ from typing import Any, Dict, List, Optional
 from param_manager.local_store import (
     ESTADO_CONFLICT,
     ESTADO_REJECTED,
+    ESTADO_SYNCED,
     ESTADOS_PENDENTES,
 )
 from param_manager.manager import MODO_LOCAL, ParamManager
+from param_manager.type_catalog import validar_advisory
 
 
 def _copia(valor: Any) -> Any:
@@ -126,6 +128,138 @@ def describe_session(instance_name: str = 'default') -> Dict[str, Any]:
 def list_apps(instance_name: str = 'default') -> Dict[str, Any]:
     try:
         return _ok(apps=_copia(_manager(instance_name).list_apps()['apps']))
+    except Exception as exc:  # noqa: BLE001
+        return _erro(exc)
+
+
+def _resumo_param(
+    nome: str,
+    payload: Dict[str, Any],
+    estado: str,
+    updated_at: Optional[float] = None,
+    last_error: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Metadado de um parâmetro: tudo do payload **menos o valor**.
+
+    A exclusão é por lista negra de um campo só, e não por lista branca
+    dos campos conhecidos. A diferença não é estilo: uma lista branca
+    silenciosamente descarta `user_editable`, `max_length` e
+    `referenced_params`, e um front que leia daqui para preencher o
+    formulário de edição devolve esses campos vazios no próximo PUT —
+    **apagando metadado que o usuário nunca tocou**. Foi exatamente o que
+    aconteceu, e é a razão desta função existir nesta forma.
+
+    `value` fica de fora porque a tabela não o mostra: trazê-lo faria
+    envelope de `secret` atravessar o IPC a cada redesenho de linha.
+    """
+    # Um parâmetro cujo documento não seja dict não é forma esperada, mas
+    # é o tipo de coisa que um servidor antigo pode devolver — e cair
+    # aqui com `AttributeError` transformaria uma listagem inteira em
+    # erro por causa de uma linha.
+    if not isinstance(payload, dict):
+        payload = {}
+    metadado = {
+        chave: valor for chave, valor in payload.items() if chave != 'value'
+    }
+    resumo = {
+        'name': nome,
+        **_copia(metadado),
+        'state': estado,
+        'last_error': last_error,
+    }
+    # Só sobrescreve quando o chamador tem uma data melhor. O sidecar tem
+    # (a sua, de gravação local); o servidor manda a dele no próprio
+    # payload, e escrever `None` por cima apagava a data em modo remoto —
+    # a coluna "atualizado" saía como travessão para tudo.
+    if updated_at is not None or 'updated_at' not in resumo:
+        resumo['updated_at'] = updated_at
+    return resumo
+
+
+def list_params(app: str, instance_name: str = 'default') -> Dict[str, Any]:
+    """
+    Metadado dos parâmetros do app, um por linha, **sem o valor**.
+
+    Devolve todo o resto do payload — tipo, descrição, `user_editable`,
+    limites, `referenced_params` —, porque é daqui que um front preenche
+    o formulário de edição. Omitir um campo aqui faz o PUT seguinte
+    reenviá-lo vazio e **apagar metadado que ninguém tocou**.
+
+    `value` é a única omissão, e é deliberada: a tabela não o mostra, e
+    trazê-lo faria envelope de `secret` atravessar o IPC a cada redesenho
+    de linha. O valor sai do `get_param`, quando o detalhe é aberto.
+
+    A forma do retorno é a mesma nos dois modos, para a view não precisar
+    saber em qual está. O que muda é a origem: no modo local o sidecar,
+    que carrega o estado de sincronização; no remoto o próprio servidor,
+    onde tudo que existe está sincronizado por definição.
+    """
+    try:
+        manager = _manager(instance_name)
+        if manager.mode != MODO_LOCAL:
+            documentos = manager.get_all_params(app) or {}
+            return _ok(
+                app=app,
+                params=[
+                    _resumo_param(nome, documentos[nome], ESTADO_SYNCED)
+                    for nome in sorted(documentos)
+                ],
+            )
+
+        return _ok(
+            app=app,
+            params=[
+                _resumo_param(
+                    registro.get('name'),
+                    registro.get('payload') or {},
+                    registro.get('state'),
+                    registro.get('updated_at'),
+                    registro.get('last_error'),
+                )
+                for registro in manager._local_store.list_params(app)
+            ],
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _erro(exc)
+
+
+def validate_param(
+    value: Any,
+    param_type: str,
+    instance_name: str = 'default',
+    **metadata: Any,
+) -> Dict[str, Any]:
+    """
+    Avisos que o servidor provavelmente transformaria em 422.
+
+    **Conselho, nunca veto** — mesma promessa de `validar_advisory`, que
+    faz o trabalho. `warnings` vazio significa "nada suspeito", não
+    "aprovado": o catálogo pode estar velho, e regras que dependem do app
+    inteiro, como `reference`, não são verificáveis do lado do cliente.
+
+    Existe porque a validação já rodava e **não chegava a lugar nenhum**:
+    era emitida como `logger.warning`, só no modo local e só depois da
+    gravação. Quem opera por uma tela descobria o problema no fim de uma
+    sincronização inteira. Aqui ela roda antes, nos dois modos — a
+    checagem é contra o catálogo de tipos, não contra a rede.
+
+    Não grava nada e não fala com o servidor.
+    """
+    try:
+        manager = _manager(instance_name)
+        payload = {
+            'value': value,
+            'type': param_type,
+            **{
+                chave: valor
+                for chave, valor in metadata.items()
+                if valor is not None
+            },
+        }
+        return _ok(
+            warnings=validar_advisory(payload, manager._type_catalog())
+        )
     except Exception as exc:  # noqa: BLE001
         return _erro(exc)
 

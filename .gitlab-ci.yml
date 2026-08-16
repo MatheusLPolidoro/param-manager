@@ -48,8 +48,13 @@ pip-audit:
     # 3.10-slim é mais antigo que o da 3.13-slim — sobe junto com o pip.
     - pip install --upgrade pip setuptools
     - pip install pip-audit
-    # Instala o pacote para auditar o que ele realmente arrasta.
-    - pip install .
+    # Instala o pacote para auditar o que ele realmente arrasta —
+    # inclusive o extra `front`, porque é isso que o usuário recebe
+    # quando pede `param-manager[front]`. A imagem é bookworm (glibc
+    # 2.36), que satisfaz o manylinux_2_35 do `pytauri-wheel`, e aqui só
+    # se instala: as libs de gtk fariam falta para importar, não para
+    # auditar.
+    - pip install ".[front]"
     - pip-audit --progress-spinner off
 
 # ---------------------------------------------------------------- qualidade
