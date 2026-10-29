@@ -30,8 +30,14 @@ dependencies = [
 # minor de CPython (cp310..cp313) e não é abi3, então em 3.14 o pip cairia
 # no sdist e exigiria toolchain Rust — falha longa e ilegível no fim de um
 # `pip install`. Com o marcador, o extra simplesmente não resolve ali.
+#
+# O piso 3.11 é pelo mesmo motivo do piso 3.10 da lib: o `pytauri` arrasta
+# o `pillow`, cujas CVEs de 2026-10 só se corrigem no 13.0.0, que exige
+# >=3.11. Em 3.10 o teto alcançável é o 12.3.0, ainda vulnerável. O pin do
+# `pillow` existe para o pip não resolver uma versão antiga.
 front = [
-    "pytauri-wheel==0.8.*; python_version < '3.14'",
+    "pytauri-wheel==0.8.*; python_version >= '3.11' and python_version < '3.14'",
+    "pillow>=13.0.0; python_version >= '3.11' and python_version < '3.14'",
     "anyio>=4.0",
 ]
 

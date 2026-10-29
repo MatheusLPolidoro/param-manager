@@ -12,9 +12,10 @@ param-manager-front          # ou: python -m param_manager.front
 ```
 
 O extra traz `pytauri-wheel`, que é um wheel nativo — **não é preciso Rust nem Node**.
-Ele publica wheels por minor de CPython (3.10 a 3.13) e não é `abi3`, então o extra
-declara `python_version < "3.14"`: em 3.14 ele simplesmente não resolve, em vez de o pip
-tentar compilar do sdist.
+O extra funciona do **Python 3.11 ao 3.13**. O `pytauri-wheel` publica wheels por minor
+de CPython e não é `abi3`, então a partir do 3.14 o extra simplesmente não resolve, em
+vez de o pip tentar compilar do sdist. No 3.10 ele também não resolve: o `pillow`, que
+vem junto, só corrige suas vulnerabilidades conhecidas em versões que exigem 3.11.
 
 Runtime de webview exigido pelo sistema operacional:
 
