@@ -7,7 +7,12 @@ readme = "README.md"
 # Piso 3.10: python-dotenv 1.2.2, que corrige a PYSEC-2026-2270, exige
 # >=3.10. Em 3.9 o teto é 1.2.1, ainda vulnerável; em 3.8, 1.0.1. Manter
 # qualquer uma das duas significaria distribuir a falha.
-requires-python = ">=3.10,<=3.14"
+#
+# Sem teto, de propósito. Lib pura não tem como saber que vai quebrar
+# numa versão que ainda não existe, e o teto antigo, "<=3.14", já recusava
+# o 3.14.1 (3.14.1 > 3.14). O extra `front`, que depende de wheel nativo,
+# tem marcador próprio logo abaixo.
+requires-python = ">=3.10"
 
 dependencies = [
     "tinydb>=4.8.0",
@@ -25,8 +30,14 @@ dependencies = [
 # minor de CPython (cp310..cp313) e não é abi3, então em 3.14 o pip cairia
 # no sdist e exigiria toolchain Rust — falha longa e ilegível no fim de um
 # `pip install`. Com o marcador, o extra simplesmente não resolve ali.
+#
+# O piso 3.11 é pelo mesmo motivo do piso 3.10 da lib: o `pytauri` arrasta
+# o `pillow`, cujas CVEs de 2026-10 só se corrigem no 13.0.0, que exige
+# >=3.11. Em 3.10 o teto alcançável é o 12.3.0, ainda vulnerável. O pin do
+# `pillow` existe para o pip não resolver uma versão antiga.
 front = [
-    "pytauri-wheel==0.8.*; python_version < '3.14'",
+    "pytauri-wheel==0.8.*; python_version >= '3.11' and python_version < '3.14'",
+    "pillow>=13.0.0; python_version >= '3.11' and python_version < '3.14'",
     "anyio>=4.0",
 ]
 

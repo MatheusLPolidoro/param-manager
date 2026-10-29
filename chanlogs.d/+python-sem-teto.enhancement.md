@@ -1,0 +1,1 @@
+A biblioteca passa a instalar em qualquer Python a partir do 3.10, sem limite superior. Antes, o limite declarado recusava até as correções do 3.14, como o 3.14.1. O extra `front` continua indisponível a partir do 3.14, porque o componente nativo de que ele depende ainda não publica pacote para essas versões.

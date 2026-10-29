@@ -36,26 +36,47 @@ gitleaks:
   script:
     - gitleaks detect --source . --no-banner --redact --verbose
 
-pip-audit:
+# Roda no PISO declarado, não na versão corrente. Como o job instala sem
+# pins, o interpretador mais baixo resolve as versões mais antigas — que é
+# onde as vulnerabilidades moram. Auditar o piso domina auditar o teto.
+#
+# São dois pisos: o da lib (3.10) e o do extra `front` (3.11, ver o
+# pyproject). Um job só no 3.10 não veria o front, que ali não resolve.
+#
+# A ferramenta mora num venv e o alvo em outro. Instalados juntos, o
+# pip-audit audita a si mesmo: o `filelock` dele (via CacheControl) tem
+# CVE sem correção para 3.10, e reprovava o job por algo que nunca chega a
+# quem instala a lib. PIPAPI_PYTHON_LOCATION aponta o pip-audit para o
+# interpretador do alvo.
+.pip-audit:
   stage: seguranca
-  # Roda no PISO declarado, não na versão corrente. Como o job instala
-  # sem pins, o interpretador mais baixo resolve as versões mais antigas
-  # — que é onde as vulnerabilidades moram. Auditar o piso domina
-  # auditar o teto, e custa um job só.
-  image: python:3.10-slim
+  variables:
+    ALVO: '.'
   script:
-    # O setuptools que acompanha a imagem também é auditado, e o da
-    # 3.10-slim é mais antigo que o da 3.13-slim — sobe junto com o pip.
-    - pip install --upgrade pip setuptools
-    - pip install pip-audit
-    # Instala o pacote para auditar o que ele realmente arrasta —
-    # inclusive o extra `front`, porque é isso que o usuário recebe
-    # quando pede `param-manager[front]`. A imagem é bookworm (glibc
-    # 2.36), que satisfaz o manylinux_2_35 do `pytauri-wheel`, e aqui só
-    # se instala: as libs de gtk fariam falta para importar, não para
-    # auditar.
-    - pip install ".[front]"
-    - pip-audit --progress-spinner off
+    - python -m venv /opt/ferramenta
+    - /opt/ferramenta/bin/pip install --upgrade pip
+    - /opt/ferramenta/bin/pip install pip-audit
+    - python -m venv /opt/alvo
+    # O pip e o setuptools do alvo também são auditados, e os do venv de
+    # 3.10 são antigos — sobem antes.
+    - /opt/alvo/bin/pip install --upgrade pip setuptools
+    # A imagem é bookworm (glibc 2.36), que satisfaz o manylinux_2_35 do
+    # `pytauri-wheel`; aqui só se instala, então as libs de gtk que
+    # faltariam para importar não fazem falta.
+    - /opt/alvo/bin/pip install "$ALVO"
+    - >-
+      PIPAPI_PYTHON_LOCATION=/opt/alvo/bin/python
+      /opt/ferramenta/bin/pip-audit --progress-spinner off
+
+pip-audit:3.10:
+  extends: .pip-audit
+  image: python:3.10-slim
+
+pip-audit:front:
+  extends: .pip-audit
+  image: python:3.11-slim
+  variables:
+    ALVO: '.[front]'
 
 # ---------------------------------------------------------------- qualidade
 
@@ -88,9 +109,10 @@ ruff:
     expire_in: 1 week
   coverage: '/^TOTAL.+?(\d+\%)$/'
 
-# A biblioteca declara requires-python = ">=3.10,<=3.14". Piso, meio e a
-# versão de uso corrente: uma quebra de sintaxe nova já chegou ao PyPI
-# antes de existir esta matriz.
+# A biblioteca declara requires-python = ">=3.10", sem teto. Piso, meio,
+# a versão de uso corrente e a mais nova publicada: uma quebra de sintaxe
+# nova já chegou ao PyPI antes de existir esta matriz, e sem teto é o job
+# da versão mais nova que segura a promessa.
 testes:3.10:
   extends: .testes
   image: python:3.10-slim
@@ -102,6 +124,10 @@ testes:3.12:
 testes:3.13:
   extends: .testes
   image: python:3.13-slim
+
+testes:3.14:
+  extends: .testes
+  image: python:3.14-slim
 
 # --------------------------------------------------------------- integração
 
