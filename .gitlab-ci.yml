@@ -88,9 +88,10 @@ ruff:
     expire_in: 1 week
   coverage: '/^TOTAL.+?(\d+\%)$/'
 
-# A biblioteca declara requires-python = ">=3.10,<=3.14". Piso, meio e a
-# versão de uso corrente: uma quebra de sintaxe nova já chegou ao PyPI
-# antes de existir esta matriz.
+# A biblioteca declara requires-python = ">=3.10", sem teto. Piso, meio,
+# a versão de uso corrente e a mais nova publicada: uma quebra de sintaxe
+# nova já chegou ao PyPI antes de existir esta matriz, e sem teto é o job
+# da versão mais nova que segura a promessa.
 testes:3.10:
   extends: .testes
   image: python:3.10-slim
@@ -102,6 +103,10 @@ testes:3.12:
 testes:3.13:
   extends: .testes
   image: python:3.13-slim
+
+testes:3.14:
+  extends: .testes
+  image: python:3.14-slim
 
 # --------------------------------------------------------------- integração
 
