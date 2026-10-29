@@ -1,1 +1,0 @@
-A edição de usuários virou uma tabela com cabeçalho e um interruptor de status que mostra por escrito se está ativo ou inativo. O editor expandido ficou maior e com tratamento de editor de código para `json` e `pattern`.

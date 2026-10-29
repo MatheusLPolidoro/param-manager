@@ -1,1 +1,0 @@
-Usuários ganharam identificador gerado automaticamente, garantidamente sem repetição, exibido na tabela e no formulário. O formulário de usuário passou a seguir o mesmo desenho do painel administrativo web.
