@@ -1,0 +1,1073 @@
+
+<!doctype html>
+<html lang="pt" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../configuracao/">
+      
+      
+        <link rel="next" href="../front/">
+      
+      
+      <link rel="icon" href="../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Modo local - Param Manager</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/css/extra.css">
+    
+      <link rel="stylesheet" href="../assets/css/termynal.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#modo-local-desenvolver-sem-o-servidor" class="md-skip">
+          Pular para conteúdo
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabeçalho">
+    <a href=".." title="Param Manager" class="md-header__button md-logo" aria-label="Param Manager" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Param Manager
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Modo local
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Buscar" placeholder="Buscar" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Pesquisar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpar" aria-label="Limpar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando busca
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navegação" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Param Manager" class="md-nav__button md-logo" aria-label="Param Manager" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    Param Manager
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sobre/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    O que é ParamManager
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Primeiros passos
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Primeiros passos
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../primeiros_passos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introdução
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../instalacao/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Instalação
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tutorial
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuracao/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuração
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Modo local
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Modo local
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ligando-o-modo-local" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ligando o modo local
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trabalhando-offline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Trabalhando offline
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parametros-protegidos-nao-sao-criados-offline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parâmetros protegidos não são criados offline
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aviso-antecipado-de-valor-invalido" class="md-nav__link">
+    <span class="md-ellipsis">
+      Aviso antecipado de valor inválido
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enviando-para-o-servidor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enviando para o servidor
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enviando para o servidor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conflitos-nunca-sao-resolvidos-sozinhos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conflitos nunca são resolvidos sozinhos
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#o-que-acontece-quando-o-servidor-recusa" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que acontece quando o servidor recusa
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#voltando-para-o-servidor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Voltando para o servidor
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interface-grafica" class="md-nav__link">
+    <span class="md-ellipsis">
+      Interface gráfica
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../front/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Front desktop
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contribuindo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribuindo
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Alterações
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../estrutura/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Estrutura
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#ligando-o-modo-local" class="md-nav__link">
+    <span class="md-ellipsis">
+      Ligando o modo local
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#trabalhando-offline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Trabalhando offline
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#parametros-protegidos-nao-sao-criados-offline" class="md-nav__link">
+    <span class="md-ellipsis">
+      Parâmetros protegidos não são criados offline
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#aviso-antecipado-de-valor-invalido" class="md-nav__link">
+    <span class="md-ellipsis">
+      Aviso antecipado de valor inválido
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#enviando-para-o-servidor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Enviando para o servidor
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Enviando para o servidor">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#conflitos-nunca-sao-resolvidos-sozinhos" class="md-nav__link">
+    <span class="md-ellipsis">
+      Conflitos nunca são resolvidos sozinhos
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#o-que-acontece-quando-o-servidor-recusa" class="md-nav__link">
+    <span class="md-ellipsis">
+      O que acontece quando o servidor recusa
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#voltando-para-o-servidor" class="md-nav__link">
+    <span class="md-ellipsis">
+      Voltando para o servidor
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interface-grafica" class="md-nav__link">
+    <span class="md-ellipsis">
+      Interface gráfica
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+<h1 id="modo-local-desenvolver-sem-o-servidor">Modo local — desenvolver sem o servidor</h1>
+<p>Até aqui o <code>ParamManager</code> só sabia trabalhar contra a API: qualquer
+leitura ou escrita precisava do servidor no ar. O <strong>modo local</strong> remove
+essa dependência para o dia a dia de desenvolvimento — você cria a
+aplicação, escreve os parâmetros e lê tudo de um arquivo na sua máquina,
+sem nenhuma chamada de rede. Quando quiser, sincroniza com o servidor.</p>
+<div class="admonition info">
+<p class="admonition-title">O padrão não mudou</p>
+<p>O modo padrão continua sendo <code>remote</code>, com exatamente o mesmo
+comportamento de sempre. Se você não pedir o modo local, nada muda
+para o seu código.</p>
+</div>
+<h2 id="ligando-o-modo-local">Ligando o modo local</h2>
+<p>Pelo construtor:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">param_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">ParamManager</span>
+
+<span class="n">params</span> <span class="o">=</span> <span class="n">ParamManager</span><span class="o">.</span><span class="n">get_instance</span><span class="p">(</span>
+    <span class="n">instance_name</span><span class="o">=</span><span class="s1">&#39;dev&#39;</span><span class="p">,</span>
+    <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;local&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Ou por variável de ambiente, sem tocar no código:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># vale para todas as instâncias</span>
+<span class="nv">PARAM_MANAGER_MODE</span><span class="o">=</span><span class="nb">local</span>
+
+<span class="c1"># ou só para a instância chamada &quot;dev&quot;</span>
+<span class="nv">DEV_PARAM_MANAGER_MODE</span><span class="o">=</span><span class="nb">local</span>
+</code></pre></div>
+<p>A precedência é a mesma do resto da biblioteca: <strong>argumento do
+construtor &gt; variável prefixada pela instância &gt; variável global</strong>.</p>
+<p>Para saber em que modo você está:</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">mode</span>  <span class="c1"># &#39;local&#39; ou &#39;remote&#39;</span>
+</code></pre></div>
+<h2 id="trabalhando-offline">Trabalhando offline</h2>
+<p>As funções são as mesmas dos dois modos — o que muda é o destino:</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">create_app</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;Contas a pagar&#39;</span><span class="p">)</span>
+
+<span class="n">params</span><span class="o">.</span><span class="n">upsert_params</span><span class="p">(</span>
+    <span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;porta&#39;</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="mi">8080</span><span class="p">,</span>
+    <span class="n">param_type</span><span class="o">=</span><span class="s1">&#39;int&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">params</span><span class="o">.</span><span class="n">get_param</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;porta&#39;</span><span class="p">)</span>      <span class="c1"># 8080</span>
+<span class="n">params</span><span class="o">.</span><span class="n">get_all_params</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">)</span>
+<span class="n">params</span><span class="o">.</span><span class="n">list_apps</span><span class="p">()</span>
+
+<span class="n">params</span><span class="o">.</span><span class="n">delete_param</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;porta&#39;</span><span class="p">)</span>
+<span class="n">params</span><span class="o">.</span><span class="n">delete_app</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">)</span>
+</code></pre></div>
+<p>O rascunho fica num arquivo próprio, ao lado do cache:</p>
+<div class="highlight"><pre><span></span><code>&lt;base&gt;/param_manager/&lt;instancia&gt;/local_&lt;instancia&gt;.json
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">Ele é separado do cache de propósito</p>
+<p>A biblioteca limpa o cache automaticamente quando a API responde
+algo ilegível. Se o rascunho morasse no mesmo arquivo, essa limpeza
+apagaria o que você ainda não sincronizou — por causa de uma falha
+que não tem nada a ver com ele.</p>
+</div>
+<h2 id="parametros-protegidos-nao-sao-criados-offline">Parâmetros protegidos não são criados offline</h2>
+<p>Os tipos <code>secret</code>, <code>user</code> e <code>users</code> <strong>não podem ser criados no modo
+local</strong>. A cifragem desses valores acontece no servidor, e gravá-los
+localmente significaria guardar o conteúdo em claro no seu disco.</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">upsert_params</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;senha&#39;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">param_type</span><span class="o">=</span><span class="s1">&#39;secret&#39;</span><span class="p">)</span>
+<span class="c1"># LocalStoreError: ... só pode ser criado com o servidor ...</span>
+</code></pre></div>
+<p>Ler um parâmetro protegido que <strong>já foi sincronizado</strong> continua
+funcionando normalmente: o valor cifrado está no cache e a biblioteca
+sabe decifrá-lo.</p>
+<h2 id="aviso-antecipado-de-valor-invalido">Aviso antecipado de valor inválido</h2>
+<p>Ao gravar, a biblioteca compara o valor com o catálogo de tipos do
+servidor e avisa no log quando ele provavelmente será recusado:</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">upsert_params</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;nome&#39;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="s1">&#39;x&#39;</span> <span class="o">*</span> <span class="mi">40</span><span class="p">,</span> <span class="n">param_type</span><span class="o">=</span><span class="s1">&#39;string&#39;</span><span class="p">)</span>
+<span class="c1"># WARNING ... comprimento 40 passa do máximo 30; informe max_length no upsert</span>
+</code></pre></div>
+<p><strong>O aviso não impede a gravação.</strong> Quem valida de verdade é o servidor,
+na sincronização — o objetivo aqui é que o erro apareça na hora, e não
+no fim de uma sessão inteira de trabalho.</p>
+<p>O limite padrão de 30 caracteres é do servidor, e vale quando o pedido
+não informa outro. Para elevá-lo, mande o limite junto:</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">upsert_params</span><span class="p">(</span>
+    <span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="s1">&#39;nome&#39;</span><span class="p">,</span>
+    <span class="n">value</span><span class="o">=</span><span class="s1">&#39;x&#39;</span> <span class="o">*</span> <span class="mi">40</span><span class="p">,</span>
+    <span class="n">param_type</span><span class="o">=</span><span class="s1">&#39;string&#39;</span><span class="p">,</span>
+    <span class="n">max_length</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Para manter o catálogo atualizado — útil antes de ficar sem servidor por
+um tempo:</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">refresh_type_catalog</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="enviando-para-o-servidor">Enviando para o servidor</h2>
+<p>A sincronização tem <strong>duas etapas</strong>, e isso é proposital: você vê o que
+vai acontecer antes de acontecer.</p>
+<div class="highlight"><pre><span></span><code><span class="n">plano</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">sync_plan</span><span class="p">()</span>
+
+<span class="n">plano</span><span class="p">[</span><span class="s1">&#39;apps_to_create&#39;</span><span class="p">]</span>   <span class="c1"># apps que ainda não existem no servidor</span>
+<span class="n">plano</span><span class="p">[</span><span class="s1">&#39;summary&#39;</span><span class="p">]</span>          <span class="c1"># {&#39;create&#39;: 2, &#39;update&#39;: 1, &#39;conflict&#39;: 1}</span>
+
+<span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">plano</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">&#39;app&#39;</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">],</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;reason&#39;</span><span class="p">])</span>
+</code></pre></div>
+<p><code>sync_plan()</code> <strong>não grava nada</strong> — nem local, nem no servidor. Quando
+estiver satisfeito:</p>
+<div class="highlight"><pre><span></span><code><span class="n">resultado</span> <span class="o">=</span> <span class="n">params</span><span class="o">.</span><span class="n">sync_apply</span><span class="p">(</span><span class="n">plano</span><span class="p">)</span>
+
+<span class="n">resultado</span><span class="p">[</span><span class="s1">&#39;apps_created&#39;</span><span class="p">]</span>       <span class="c1"># apps criados no servidor</span>
+<span class="n">resultado</span><span class="p">[</span><span class="s1">&#39;synced&#39;</span><span class="p">]</span>             <span class="c1"># parâmetros enviados com sucesso</span>
+<span class="n">resultado</span><span class="p">[</span><span class="s1">&#39;rejected&#39;</span><span class="p">]</span>           <span class="c1"># recusados, com a mensagem do servidor</span>
+<span class="n">resultado</span><span class="p">[</span><span class="s1">&#39;forbidden&#39;</span><span class="p">]</span>          <span class="c1"># sem permissão</span>
+<span class="n">resultado</span><span class="p">[</span><span class="s1">&#39;skipped_conflicts&#39;</span><span class="p">]</span>  <span class="c1"># deixados de fora</span>
+</code></pre></div>
+<h3 id="conflitos-nunca-sao-resolvidos-sozinhos">Conflitos nunca são resolvidos sozinhos</h3>
+<p>Quando o mesmo parâmetro mudou dos dois lados, ele é marcado como
+conflito, <strong>fica de fora</strong> da aplicação e é apresentado com os dois
+valores para você decidir:</p>
+<div class="highlight"><pre><span></span><code><span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">plano</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;conflict&#39;</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">],</span> <span class="s1">&#39;local:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;local&#39;</span><span class="p">],</span> <span class="s1">&#39;servidor:&#39;</span><span class="p">,</span> <span class="n">item</span><span class="p">[</span><span class="s1">&#39;remote&#39;</span><span class="p">])</span>
+</code></pre></div>
+<p>Para forçar o envio de um conflito, mude a ação do item para <code>'update'</code>
+antes de aplicar — assim a decisão fica explícita:</p>
+<div class="highlight"><pre><span></span><code><span class="n">item</span><span class="p">[</span><span class="s1">&#39;action&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="s1">&#39;update&#39;</span>
+<span class="n">params</span><span class="o">.</span><span class="n">sync_apply</span><span class="p">(</span><span class="n">plano</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="o-que-acontece-quando-o-servidor-recusa">O que acontece quando o servidor recusa</h3>
+<p>Cada caso é tratado de forma diferente, porque significam coisas
+diferentes:</p>
+<table>
+<thead>
+<tr>
+<th>Situação</th>
+<th>O que acontece</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Valor inválido</td>
+<td>O parâmetro <strong>continua guardado localmente</strong>, com a mensagem exata do servidor, e os demais continuam sendo enviados</td>
+</tr>
+<tr>
+<td>Sem permissão</td>
+<td>O parâmetro segue pendente, para ser tentado de novo quando a credencial for corrigida</td>
+</tr>
+<tr>
+<td>App não existe</td>
+<td>O app é criado no servidor antes dos parâmetros</td>
+</tr>
+</tbody>
+</table>
+<p>A sincronização é retomável: se ela for interrompida no meio, a execução
+seguinte continua de onde parou.</p>
+<h2 id="voltando-para-o-servidor">Voltando para o servidor</h2>
+<p>Depois de sincronizar, construa uma instância nova em modo remoto:</p>
+<div class="highlight"><pre><span></span><code><span class="n">params</span><span class="o">.</span><span class="n">sync_apply</span><span class="p">(</span><span class="n">params</span><span class="o">.</span><span class="n">sync_plan</span><span class="p">())</span>
+
+<span class="n">producao</span> <span class="o">=</span> <span class="n">ParamManager</span><span class="o">.</span><span class="n">get_instance</span><span class="p">(</span>
+    <span class="n">instance_name</span><span class="o">=</span><span class="s1">&#39;producao&#39;</span><span class="p">,</span>
+    <span class="n">api_url</span><span class="o">=</span><span class="s1">&#39;https://params.exemplo.com&#39;</span><span class="p">,</span>
+    <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;remote&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Por que uma instância nova</p>
+<p>Uma instância já criada não é reconfigurada — essa proteção existe
+para evitar que parte do seu código passe a enxergar uma
+configuração diferente da outra parte no meio da execução.</p>
+</div>
+<h2 id="interface-grafica">Interface gráfica</h2>
+<p>Para aplicações com interface, o módulo <code>param_manager.api</code> oferece as
+mesmas operações em funções que devolvem sempre um dicionário com <code>ok</code>,
+em vez de lançar exceções:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">param_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">api</span>
+
+<span class="n">api</span><span class="o">.</span><span class="n">configure</span><span class="p">(</span><span class="n">instance_name</span><span class="o">=</span><span class="s1">&#39;front&#39;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;local&#39;</span><span class="p">,</span> <span class="n">api_url</span><span class="o">=</span><span class="s1">&#39;...&#39;</span><span class="p">)</span>
+
+<span class="n">resposta</span> <span class="o">=</span> <span class="n">api</span><span class="o">.</span><span class="n">get_all_params</span><span class="p">(</span><span class="s1">&#39;financeiro&#39;</span><span class="p">,</span> <span class="n">instance_name</span><span class="o">=</span><span class="s1">&#39;front&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">resposta</span><span class="p">[</span><span class="s1">&#39;ok&#39;</span><span class="p">]:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">resposta</span><span class="p">[</span><span class="s1">&#39;params&#39;</span><span class="p">])</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">resposta</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">])</span>
+</code></pre></div>
+<div class="admonition warning">
+<p class="admonition-title">As funções bloqueiam</p>
+<p>Elas fazem requisições, leitura de disco e decifragem. Chame-as fora
+do laço de eventos da interface, sob pena de a janela congelar.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Rodapé" >
+        
+          
+          <a href="../configuracao/" class="md-footer__link md-footer__link--prev" aria-label="Anterior: Configuração">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Anterior
+              </span>
+              <div class="md-ellipsis">
+                Configuração
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../front/" class="md-footer__link md-footer__link--next" aria-label="Próximo: Front desktop">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Próximo
+              </span>
+              <div class="md-ellipsis">
+                Front desktop
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.annotate", "content.tabs.link", "content.code.copy", "navigation.footer"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copiado para \u00e1rea de transfer\u00eancia", "clipboard.copy": "Copiar para \u00e1rea de transfer\u00eancia", "search.result.more.one": "mais 1 nesta p\u00e1gina", "search.result.more.other": "# mais nesta p\u00e1gina", "search.result.none": "Nenhum documento encontrado", "search.result.one": "1 documento encontrado", "search.result.other": "# documentos encontrados", "search.result.placeholder": "Digite para iniciar a busca", "search.result.term.missing": "Ausente", "select.version": "Selecione a vers\u00e3o"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+        <script src="../assets/js/filetree.js"></script>
+      
+        <script src="../assets/js/termynal-init.js"></script>
+      
+        <script src="../assets/js/termynal.js"></script>
+      
+        <script src="../assets/js/LogoAnimation.js"></script>
+      
+    
+  </body>
+</html>

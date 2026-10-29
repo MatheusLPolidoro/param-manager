@@ -1,0 +1,1792 @@
+
+<!doctype html>
+<html lang="pt" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../contribuindo/">
+      
+      
+        <link rel="next" href="../estrutura/">
+      
+      
+      <link rel="icon" href="../assets/favicon.ico">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.12">
+    
+    
+      
+        <title>Alterações - Param Manager</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.2afb09e1.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/css/extra.css">
+    
+      <link rel="stylesheet" href="../assets/css/termynal.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#changelogs" class="md-skip">
+          Pular para conteúdo
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Cabeçalho">
+    <a href=".." title="Param Manager" class="md-header__button md-logo" aria-label="Param Manager" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Param Manager
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Alterações
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="teal"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Buscar" placeholder="Buscar" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Pesquisar">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Limpar" aria-label="Limpar" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Inicializando busca
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navegação" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Param Manager" class="md-nav__button md-logo" aria-label="Param Manager" data-md-component="logo">
+      
+  <img src="../assets/logo.svg" alt="logo">
+
+    </a>
+    Param Manager
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Docs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sobre/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    O que é ParamManager
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Primeiros passos
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Primeiros passos
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../primeiros_passos/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introdução
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../instalacao/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Instalação
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorial/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Tutorial
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuracao/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Configuração
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modo_local/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Modo local
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../front/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Front desktop
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../contribuindo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contribuindo
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Alterações
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Alterações
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changelogs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Changelogs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Changelogs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#otimizacoes" class="md-nav__link">
+    <span class="md-ellipsis">
+      OTIMIZAÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao" class="md-nav__link">
+    <span class="md-ellipsis">
+      DOCUMENTAÇÃO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infraestrutura" class="md-nav__link">
+    <span class="md-ellipsis">
+      INFRAESTRUTURA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mudancas-quebradas" class="md-nav__link">
+    <span class="md-ellipsis">
+      MUDANÇAS QUEBRADAS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#otimizacoes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      OTIMIZAÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#seguranca" class="md-nav__link">
+    <span class="md-ellipsis">
+      SEGURANÇA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      DOCUMENTAÇÃO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testes" class="md-nav__link">
+    <span class="md-ellipsis">
+      TESTES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infraestrutura_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      INFRAESTRUTURA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limpeza" class="md-nav__link">
+    <span class="md-ellipsis">
+      LIMPEZA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infraestrutura_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      INFRAESTRUTURA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      DOCUMENTAÇÃO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      TESTES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#otimizacoes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      OTIMIZAÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../estrutura/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Estrutura
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Índice">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Índice
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#changelogs" class="md-nav__link">
+    <span class="md-ellipsis">
+      Changelogs
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Changelogs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#otimizacoes" class="md-nav__link">
+    <span class="md-ellipsis">
+      OTIMIZAÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao" class="md-nav__link">
+    <span class="md-ellipsis">
+      DOCUMENTAÇÃO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infraestrutura" class="md-nav__link">
+    <span class="md-ellipsis">
+      INFRAESTRUTURA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mudancas-quebradas" class="md-nav__link">
+    <span class="md-ellipsis">
+      MUDANÇAS QUEBRADAS
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#otimizacoes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      OTIMIZAÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#seguranca" class="md-nav__link">
+    <span class="md-ellipsis">
+      SEGURANÇA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      DOCUMENTAÇÃO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testes" class="md-nav__link">
+    <span class="md-ellipsis">
+      TESTES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infraestrutura_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      INFRAESTRUTURA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#limpeza" class="md-nav__link">
+    <span class="md-ellipsis">
+      LIMPEZA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#infraestrutura_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      INFRAESTRUTURA
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_8" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#documentacao_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      DOCUMENTAÇÃO
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#testes_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      TESTES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_9" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_10" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_11" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_12" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_13" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_14" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_15" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_16" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correcoes_17" class="md-nav__link">
+    <span class="md-ellipsis">
+      CORREÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#novas-funcionalidades_7" class="md-nav__link">
+    <span class="md-ellipsis">
+      NOVAS FUNCIONALIDADES
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#otimizacoes_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      OTIMIZAÇÕES
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+
+  <h1>Alterações</h1>
+
+<h2 id="changelogs"><img alt="🕑" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f551.svg" title=":clock2:" /> Changelogs</h2>
+<p>Versão 0.6.0 (2026-10-29)</p>
+<h3 id="novas-funcionalidades"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>A lista de aplicações pode ser recolhida e redimensionada, e a largura escolhida é lembrada. O painel de parâmetro fecha ao clicar no vazio da área de conteúdo ou com Esc.</li>
+<li>Aplicações e parâmetros ganharam filtro: digite para buscar por nome, descrição ou tipo, e tecle Enter para fixar o termo como etiqueta — vários termos se acumulam. Parâmetros também filtram por tipo, e o contador mostra quantos de quantos estão à vista.</li>
+<li>Avisos do catálogo de tipos aparecem na tela ao salvar um parâmetro — limite de comprimento, faixa de valor, tipo desconhecido. Continuam sendo conselho e não impedem a gravação: quem valida de verdade é o servidor. Antes só existiam no log.</li>
+<li>Cada tipo de parâmetro ganhou o editor que lhe cabe: listas e dicionários com linhas que se adicionam e removem, booleano como par de botões, data e hora com o seletor do sistema, referência escolhendo entre os parâmetros que existem no aplicativo, e usuários numa tabela. Digitar JSON à mão deixou de ser necessário fora do tipo <code>json</code>.</li>
+<li>Gerencie parâmetros por um aplicativo de desktop, instalado com <code>pip install "param-manager[front]"</code> e aberto pelo comando <code>param-manager-front</code>. Ele cobre aplicações e parâmetros, o plano de sincronização e o catálogo de tipos, em português e inglês, com tema claro e escuro. Disponível do Python 3.11 ao 3.13.</li>
+<li>Liste os parâmetros de uma aplicação com tipo, descrição e estado de sincronização, sem trazer os valores, por <code>api.list_params</code>.</li>
+<li>O painel de detalhe mostra os limites, o estado de sincronização, a data da última alteração e a recusa que o servidor tenha registrado. Aplicações e parâmetros ganharam navegação por páginas.</li>
+<li>Os tipos <code>json</code> e <code>pattern</code> passam a ser editados num campo com numeração de linha e realce de sintaxe, com o mesmo tratamento para os dois.</li>
+<li>Valores que não cabem no painel lateral — <code>json</code>, <code>pattern</code>, <code>user</code> e <code>users</code> — ganharam um botão que abre o editor em tela larga.</li>
+</ul>
+<h3 id="otimizacoes"><img alt="🚀" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f680.svg" title=":rocket:" /> OTIMIZAÇÕES</h3>
+<ul>
+<li>A biblioteca passa a instalar em qualquer Python a partir do 3.10, sem limite superior. Antes, o limite declarado recusava até as correções do 3.14, como o 3.14.1. O extra <code>front</code> continua indisponível a partir do 3.14, porque o componente nativo de que ele depende ainda não publica pacote para essas versões.</li>
+<li>A descrição da aplicação aparece acima da tabela, e o painel de detalhe passa a mostrar aplicação e tipo junto aos demais metadados. As datas são exibidas em linguagem corrente — "há 2 horas" —, com a data exata ao repousar o ponteiro. Criar uma aplicação leva direto para a aba de parâmetros.</li>
+<li>A edição de usuários virou uma tabela com cabeçalho e um interruptor de status que mostra por escrito se está ativo ou inativo. O editor expandido ficou maior e com tratamento de editor de código para <code>json</code> e <code>pattern</code>.</li>
+<li>A marca ficou alinhada ao título na barra superior, as tabelas ganharam linhas em zebra no roxo do produto, e a descrição virou um campo de várias linhas onde ela costuma precisar.</li>
+<li>A paginação passou a numerar as páginas e a permitir escolher quantas linhas exibir. Listas, dicionários e usuários dentro de um parâmetro também paginam, em vez de crescer até empurrar os botões para fora da tela.</li>
+<li>A tela de sessão esconde URL, usuário e senha quando o modo escolhido é o local, onde não há rede, e explica onde os parâmetros serão gravados.</li>
+<li>Ações e listas ganharam ícones, que acompanham o rótulo e seguem a cor do tema em uso.</li>
+<li>Excluir uma aplicação ou um parâmetro passa a exigir que o nome seja digitado. O aviso também diz quantos parâmetros vão junto ao excluir uma aplicação.</li>
+<li>Nome de aplicação e chave de parâmetro passam a trocar espaços por hífen enquanto se digita, já que viram parte do endereço no servidor.</li>
+<li>O aplicativo passa a usar a marca e o roxo do Param Manager, os mesmos do site de documentação.</li>
+<li>O editor de <code>json</code> e <code>pattern</code> abre um pouco mais alto e levemente mais estreito que os demais campos.</li>
+<li>O editor de <code>json</code> e <code>pattern</code> perdeu o contorno duro que aparecia no tema escuro. O formulário de usuário ficou contido e centrado, com o identificador como etiqueta em vez de campo. Listas, dicionários e segredos ganharam moldura própria, e os campos numéricos perderam as setas de incremento.</li>
+<li>Texto maior, linhas de tabela mais folgadas e contraste ampliado nos dois temas. O tema passa a ser trocado por um botão de ícone que percorre sistema, claro e escuro, e cada tipo de parâmetro ganhou um ícone próprio na listagem.</li>
+<li>Usuários ganharam identificador gerado automaticamente, garantidamente sem repetição, exibido na tabela e no formulário. O formulário de usuário passou a seguir o mesmo desenho do painel administrativo web.</li>
+</ul>
+<h3 id="correcoes"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>A coluna "atualizado" volta a mostrar a data em modo remoto, e no fuso certo. Ela aparecia como travessão, e antes disso como uma hora no futuro, porque o carimbo do servidor é UTC e vinha sem essa marcação.</li>
+<li>A janela deixa de quebrar ao ser reduzida: a lista de aplicações vira uma gaveta, o cabeçalho reorganiza os controles e a tabela rola dentro da própria área. Os diálogos ganharam tamanho confortável e transição de entrada.</li>
+<li>A tela deixa de ficar em branco quando a janela é reduzida ao limite com a lista de aplicações recolhida.</li>
+<li>As barras de rolagem deixam de ficar claras no tema escuro.</li>
+<li>Campos de número inteiro deixam de aceitar <code>e</code>, letras e sinais fora de lugar. Antes um valor como <code>12e5</code> era gravado como <code>12</code>, silenciosamente.</li>
+<li>Conectar uma sessão que já existe, escolhendo outro modo, deixa de anunciar sucesso. O front agora explica que a instância continua no modo anterior e oferece um nome novo para abrir a sessão no modo pedido.</li>
+<li>Corrija o front desktop instalado a partir do wheel, que abria sem ícones, sem
+  rótulos e sem opções nos seletores: um comentário do código carregava por
+  coincidência a assinatura de arquivo <code>tar</code> num byte que o protocolo interno
+  do aplicativo usa para adivinhar o tipo de conteúdo, fazendo o navegador
+  recusar aquele módulo e, em cascata, quase toda a tela.</li>
+<li>Editar um parâmetro pelo front deixa de apagar os campos que o formulário não mostra. <code>user_editable</code>, os limites e os parâmetros referenciados eram perdidos ao salvar, sem nenhum aviso.</li>
+<li>Excluir uma aplicação deixa de manter aberto o painel de um parâmetro que já não existe. Trocar de aplicação também descarta a edição em andamento, que antes seguia oferecendo salvar num parâmetro de outro lugar.</li>
+<li>Trocar o tema ou a página deixa de reconstruir a tela inteira: o que estava sendo editado no painel de parâmetro é preservado, sem o piscar do redesenho.</li>
+</ul>
+<h3 id="documentacao"><img alt="📂" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f4c2.svg" title=":open_file_folder:" /> DOCUMENTAÇÃO</h3>
+<ul>
+<li>A documentação ganhou as páginas de Configuração, com todas as variáveis de ambiente e a ordem de precedência, e do Front desktop. O README, que é também a página do pacote no PyPI, deixou de descrever a biblioteca como singleton e de prometer cache de uma hora, e passou a exibir o fluxograma do cliente também no PyPI. O tutorial corrige uma promessa: metadados omitidos em <code>upsert_params</code> só são preservados quando o servidor roda com <code>USER_EDITABLE_ENFORCEMENT=explicit</code>.</li>
+</ul>
+<h3 id="infraestrutura"><img alt="🏛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f3db.svg" title=":classical_building:" /> INFRAESTRUTURA</h3>
+<ul>
+<li>A auditoria de vulnerabilidades passa a separar a ferramenta do pacote auditado e a rodar em dois pisos: o da biblioteca (3.10) e o do extra <code>front</code> (3.11). Antes, falhas nas dependências da própria ferramenta reprovavam a auditoria sem nunca chegar a quem instala a biblioteca, e o extra era auditado num Python em que ele já não pode ser instalado.</li>
+</ul>
+<p>Versão 0.5.0 (2026-08-10)</p>
+<h3 id="mudancas-quebradas"><img alt="⚠" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a0.svg" title=":warning:" /> MUDANÇAS QUEBRADAS</h3>
+<ul>
+<li>Eleve a versão mínima de Python para 3.10. A correção da vulnerabilidade PYSEC-2026-2270 está em uma versão do <code>python-dotenv</code> publicada apenas para 3.10 ou superior; as versões alcançáveis em 3.8 e 3.9 continuam expostas, e mantê-las significaria distribuir a falha.</li>
+</ul>
+<h3 id="novas-funcionalidades_1"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Agora é possível desenvolver sem subir o servidor. Passando
+  <code>mode='local'</code> — ou definindo <code>PARAM_MANAGER_MODE=local</code> — as mesmas
+  funções de sempre (<code>create_app</code>, <code>upsert_params</code>, <code>delete_param</code>,
+  <code>delete_app</code>, <code>get_param</code>, <code>get_all_params</code>) passam a trabalhar num
+  arquivo local, sem nenhuma chamada de rede. O padrão continua sendo o
+  servidor, então quem não pedir nada não percebe diferença.</li>
+</ul>
+<p>Parâmetros dos tipos <code>secret</code>, <code>user</code> e <code>users</code> não podem ser criados
+  nesse modo: a cifragem acontece no servidor, e gravá-los localmente
+  significaria guardar o valor em claro. A tentativa falha com uma
+  mensagem explicando isso.</p>
+<p>Também foi acrescentada a função <code>list_apps()</code>, que lista as aplicações
+  nos dois modos.
+- Base para o modo de desenvolvimento local: a biblioteca passou a manter
+  um arquivo próprio, ao lado do cache, para guardar parâmetros criados sem
+  o servidor. Ele é separado de propósito — a limpeza automática do cache,
+  que acontece quando a API responde algo ilegível, não alcança o que você
+  ainda não sincronizou. Ainda sem efeito visível: nenhuma função pública
+  usa esse arquivo nesta versão.
+- No modo local, a biblioteca passou a avisar quando um valor provavelmente
+  será recusado pelo servidor — comprimento acima do limite, número fora
+  da faixa ou tipo desconhecido. O aviso não impede a gravação: quem
+  valida de verdade continua sendo o servidor, na sincronização. Serve
+  para o erro aparecer na hora, e não no fim de uma sessão inteira de
+  trabalho offline.</p>
+<p>A nova função <code>refresh_type_catalog()</code> busca no servidor a lista de tipos
+  aceitos e os limites padrão, guardando-a para uso offline. Sem ela, vale
+  uma cópia embarcada, que pode ficar desatualizada.
+- Novo módulo <code>param_manager.api</code>, pensado para aplicações com interface
+  gráfica. Ele expõe as mesmas operações em funções que sempre devolvem um
+  dicionário simples com <code>ok</code> indicando sucesso ou falha, em vez de lançar
+  exceções — o que evita que um erro atravesse a ponte entre a interface e
+  o Python como um rastreamento de pilha.</p>
+<p>Os dados devolvidos são cópias independentes, então alterá-los na
+  interface não afeta o estado interno da biblioteca.</p>
+<p>As funções são bloqueantes: chame-as fora do laço de eventos da
+  interface, sob pena de a janela travar durante uma requisição ou a
+  leitura de um parâmetro protegido.
+- Os parâmetros criados no modo local agora podem ser enviados ao servidor.
+  A sincronização acontece em duas etapas: <code>sync_plan()</code> mostra o que seria
+  feito — o que será criado, o que será atualizado e o que está em conflito
+  — sem tocar em nada; <code>sync_apply()</code> executa apenas o que foi apresentado
+  no plano.</p>
+<p>Conflito nunca é resolvido sozinho. Quando o mesmo parâmetro mudou dos
+  dois lados, ele fica de fora e é apresentado com os dois valores, para
+  que a decisão seja de quem está operando.</p>
+<p>Um parâmetro recusado pelo servidor permanece guardado localmente, com a
+  mensagem exata que o servidor devolveu, e os demais continuam sendo
+  enviados normalmente. Falta de permissão é tratada de forma distinta de
+  valor inválido: o parâmetro segue pendente e volta a ser tentado quando a
+  credencial for corrigida.</p>
+<h3 id="otimizacoes_1"><img alt="🚀" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f680.svg" title=":rocket:" /> OTIMIZAÇÕES</h3>
+<ul>
+<li>A exceção de parâmetro não encontrado passou a se chamar
+  <code>ParamNotFoundError</code>, acompanhando o restante da biblioteca, que agora
+  usa nomes em inglês. <strong>Nada precisa ser alterado em código já escrito</strong>:
+  <code>ParamNaoEncontradoError</code> continua exportado e é a mesma classe, então
+  um <code>except</code> existente segue capturando normalmente.</li>
+<li>Inclua <code>api_error_cooldown</code> (e as variáveis <code>{INSTANCIA}_API_ERROR_COOLDOWN</code> / <code>API_ERROR_COOLDOWN</code>) para configurar por quanto tempo a biblioteca evita novas tentativas após uma falha da API. Sem configuração, o valor continua sendo o mesmo da duração do cache. Valores inválidos ou vazios são ignorados com aviso, caindo na duração do cache.</li>
+<li>Omita <code>user_editable</code> do payload quando o chamador não informa o campo, permitindo ao servidor distinguir "não enviado" de "enviado como falso" e liberar a edição de parâmetros marcados como editáveis por usuário comum.</li>
+</ul>
+<h3 id="correcoes_1"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Aplique o tempo limite configurado também nas requisições de autenticação e serialize a renovação de token, evitando travar a aplicação chamadora e disparar renovações concorrentes.</li>
+<li>Ative o intervalo de espera também quando a API responde com erro HTTP, evitando novas tentativas a cada chamada contra um servidor indisponível.</li>
+<li>Buscar um parâmetro ou aplicação inexistentes (404) deixa de ativar o circuit breaker, permitindo novas tentativas sem entrar em modo offline. Apenas erros de indisponibilidade real (5xx, timeout, conexão) ativam o mecanismo de fallback.</li>
+<li>Corrigida uma falha rara em que <code>get_param</code> podia lançar <code>KeyError</code> na
+  aplicação que a consome, em vez de devolver o valor ou <code>None</code>. Acontecia
+  quando outra thread apagava ou regravava o mesmo parâmetro no exato
+  instante da leitura — algo que <code>delete_param</code> e <code>upsert_params</code> fazem
+  internamente. A leitura do cache passou a ser feita de uma vez só, sem
+  essa brecha.</li>
+<li>Corrija <code>from param_manager import *</code>, que falhava por listar em <code>__all__</code> um símbolo não exportado.</li>
+<li>Corrija a corrupção do cache local sob uso concorrente. Em uma aplicação com várias threads, a limpeza de uma tabela simultânea a uma gravação podia truncar o arquivo do cache e derrubar o conteúdo de todos os aplicativos — justamente durante a indisponibilidade da API, que é quando esse cache é a única fonte de dados restante.</li>
+<li>Corrija o registro da instância quando <code>instance_name</code> é informado de forma posicional: antes, o gerenciador era configurado com o nome correto mas registrado sob o nome padrão, fazendo duas instâncias lógicas compartilharem o mesmo espaço.</li>
+<li>Corrija o uso de um token de acesso já vencido, que sob concorrência podia ser tratado como válido por até 29 minutos e fazer toda requisição falhar com 401. Threads que chegam juntas com o token vencido passam a renovar uma vez só, em vez de uma renovação por thread: como o refresh token é de uso único na configuração padrão do Keycloak, a segunda renovação invalidava a sessão que a primeira acabara de abrir.</li>
+<li>Elimina race conditions no acesso ao cache em memória: iterações seguras durante modificação concorrente, atualização atômica (CAS) do cache e do circuit breaker, e impossibilidade de resposta atrasada sobrescrever dado mais recente.</li>
+<li>Execute a inicialização da instância sob o lock do multiton, evitando que duas threads inicializem a mesma instância e substituam o lock interno, os caches e o arquivo do TinyDB.</li>
+<li>Limpe também o cache em memória do parâmetro ao apagá-lo por <code>delete_param</code>: o valor excluído — possivelmente uma credencial revogada — continuava sendo devolvido por <code>get_param</code> até o fim da janela de cache.</li>
+<li>Limpe também o cache em memória do parâmetro ao atualizá-lo por <code>upsert_params</code>: o valor anterior continuava sendo devolvido por <code>get_param</code> até o fim da janela de cache.</li>
+<li>Remova do banco local o parâmetro apagado por <code>delete_param</code>, impedindo que um valor excluído — possivelmente uma credencial revogada — continue sendo servido pelo modo offline.</li>
+<li>Restrinja a limpeza do banco local ao app envolvido: um erro de leitura da API ou do próprio arquivo passa a descartar apenas a tabela daquele app, em vez de apagar o cache offline de todas as aplicações.</li>
+<li>Serialize a renovação de token disparada por respostas 401, evitando que chamadas concorrentes usem o mesmo refresh token e invalidem a sessão umas das outras.</li>
+<li>Um parâmetro cujo valor gravado localmente era nulo não era removido do banco local quando solicitado, causando ressurreição inadvertida na recuperação offline.</li>
+<li>Uma falha ao criar o gerenciador deixa de contaminar as tentativas seguintes. Antes, um erro durante a inicialização — diretório sem permissão de escrita, cache local corrompido — guardava internamente um objeto pela metade, e toda chamada posterior recebia esse mesmo objeto quebrado até o processo ser reiniciado. O cache local que já tenha sido aberto também é fechado, para que a falha não deixe o arquivo travado no Windows.</li>
+<li>Valores inválidos ou vazios de <code>CACHE_DURATION</code> e <code>TIMEOUT</code> passam a ser ignorados com aviso, em vez de impedir a criação do gerenciador. Antes o erro subia durante a construção e deixava no lugar uma instância inutilizável, cujo uso seguinte falhava com uma mensagem sem relação com a causa. Um <code>CACHE_DURATION</code> negativo continua desligando o cache, como já acontecia.</li>
+</ul>
+<h3 id="seguranca"><img alt="🛡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f6e1.svg" title=":shield:" /> SEGURANÇA</h3>
+<ul>
+<li>Envie o cabeçalho <code>Authorization</code> também nas leituras de parâmetros quando houver credencial configurada, mantendo a leitura anônima funcional quando não houver.</li>
+<li>Impeça que valores de parâmetros <code>secret</code>, <code>user</code> e <code>users</code> sejam gravados em claro no banco local: a decifragem passa a operar sobre cópia e o cache guarda apenas o envelope cifrado.</li>
+<li>Inclua a variável <code>PARAM_MANAGER_PURGE_PLAINTEXT_CACHE</code> (desligada por padrão) para remover do banco local valores sensíveis gravados em claro por versões anteriores.</li>
+<li>Inclua o parâmetro <code>verify_ssl</code> para controlar a verificação de certificado TLS nas leituras, com precedência construtor &gt; <code>{INSTANCIA}_VERIFY_SSL</code> &gt; <code>VERIFY_SSL</code>. O padrão continua desligado, por conta dos ambientes com certificado interno.</li>
+</ul>
+<h3 id="documentacao_1"><img alt="📂" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f4c2.svg" title=":open_file_folder:" /> DOCUMENTAÇÃO</h3>
+<ul>
+<li>A documentação passou a cobrir o modo local: como ligá-lo, o que muda no
+  armazenamento, por que parâmetros protegidos não podem ser criados
+  offline, como funciona o envio em duas etapas para o servidor e como
+  conflitos são apresentados para você decidir.</li>
+</ul>
+<p>Corrigidos também três pontos do tutorial que descreviam funções e
+  nomes que não existem — <code>update_param</code>, <code>get_param_schema</code>, as variáveis
+  de ambiente de credencial e o caminho do arquivo de fallback —, e a
+  página de contribuição, que estava em branco.</p>
+<p>Blocos de código voltaram a ser exibidos como código nas páginas. Antes
+  apareciam como texto corrido, com as crases à mostra.
+- Esclareça na documentação interna que <code>verify_ssl</code> governa apenas as leituras, e que a cópia devolvida na decifragem é garantida somente para parâmetros sensíveis.
+- O README agora traz um fluxograma do cliente, mostrando como um <code>get_param</code> é resolvido entre cache, cooldown de erro, chamada à API e o fallback local.</p>
+<h3 id="testes"><img alt="🧪" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f9ea.svg" title=":test_tube:" /> TESTES</h3>
+<ul>
+<li>A biblioteca ganhou uma verificação que confronta o esquema publicado
+  pelo servidor com as rotas, os códigos de sucesso e os campos que ela de
+  fato consome — de modo que uma mudança incompatível do lado do servidor
+  apareça como falha de teste, e não como erro em produção. A verificação
+  se pula sozinha quando não há esquema disponível.</li>
+<li>A garantia de que a biblioteca não pode entrar em deadlock deixou de
+  depender de revisão e passou a ser verificada automaticamente a cada
+  build, em duas frentes: a execução real dos métodos públicos, inclusive
+  sob concorrência, e uma varredura do código que reprova qualquer
+  gravação de cache feita por fora do caminho seguro.</li>
+</ul>
+<h3 id="infraestrutura_1"><img alt="🏛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f3db.svg" title=":classical_building:" /> INFRAESTRUTURA</h3>
+<ul>
+<li>A auditoria de vulnerabilidades passa a rodar na versão mínima de Python suportada, e não na mais recente: é ali que as dependências resolvem para as versões mais antigas, onde as falhas conhecidas estão.</li>
+<li>Inclua pipeline de integração contínua com varredura de segredos no histórico, auditoria de vulnerabilidades das dependências, verificação de estilo e testes automatizados em Python 3.8, 3.11 e 3.13, além de uma suíte de integração que exercita o banco local real em vez de um substituto em memória.</li>
+<li>Regrave <code>requirements-dev.txt</code> em UTF-8 e preserve a lista padrão de exclusões do ruff, que era substituída pela configuração do projeto.</li>
+</ul>
+<h3 id="limpeza"><img alt="🧹" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f9f9.svg" title=":broom:" /> LIMPEZA</h3>
+<ul>
+<li>Elimine uma gravação redundante no banco local durante <code>delete_param</code>, que repetia o ciclo de leitura e escrita sem alterar o resultado.</li>
+</ul>
+<p>Versão 0.4.2 (2026-07-29)</p>
+<h3 id="correcoes_2"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Adicione mais uma tentativa em upsert_params apos renovar o token.</li>
+</ul>
+<h3 id="infraestrutura_2"><img alt="🏛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f3db.svg" title=":classical_building:" /> INFRAESTRUTURA</h3>
+<ul>
+<li>Altere a versão do python-dotenv para atual que não tem alerta no pip-audit.</li>
+</ul>
+<p>Versão 0.4.1 (2026-03-26)</p>
+<h3 id="correcoes_3"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Remova propagação de cache em chamada de parâmetro especifico para todos os parâmetros da aplicação.</li>
+</ul>
+<p>Versão 0.4.0 (2026-03-26)</p>
+<h3 id="novas-funcionalidades_2"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Aprimore a gestão de variáveis de ambiente: Implemente prioridade para variáveis de ambiente prefixadas com o nome da instância (ex: PLUGIN_API_URL), permitindo configurações granulares sem afetar o escopo global.</li>
+<li>Garanta a segurança entre threads (Thread-Safety): Implemente um lock de classe no método <strong>new</strong> para evitar condições de corrida na criação de instâncias nomeadas.</li>
+<li>Isole o armazenamento do TinyDB: Configure cada instância para utilizar seu próprio arquivo JSON (ex: params_default.json) em subdiretórios distintos, eliminando conflitos de escrita e travas de arquivo.</li>
+<li>Otimize a recuperação de falhas: Refine os mecanismos de cooldown e fallback local para que falhas de conexão em uma instância não bloqueiem as requisições das demais.</li>
+<li>Persista o contexto no objeto: Armazene o instance_name dentro de cada instância para que logs, erros e metadados reflitam exatamente qual gerenciador está operando.</li>
+<li>Personalize o Logging por instância: Atualize todas as mensagens de logger para incluir o nome da instância ativa, facilitando o rastreamento em ambientes complexos.</li>
+<li>Preserve a compatibilidade do Singleton: Mantenha o funcionamento padrão para chamadas sem argumentos, direcionando-as automaticamente para a instância "default".</li>
+<li>Refatore a estrutura de instâncias para o padrão Multiton: Substitua o atributo único __instance por um dicionário _instances para permitir múltiplos gerenciadores (ex: "default", "plugin_x") no mesmo processo.</li>
+<li>Refatore a limpeza de cache: Ajuste o método clear_cache para que a purga de dados seja restrita à instância atual, sem interferir no cache de outros gerenciadores.</li>
+</ul>
+<p>Versão 0.3.8 (2026-01-02)</p>
+<h3 id="correcoes_4"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Inclua validação de banco truncado e correção de limpeza.</li>
+</ul>
+<p>Versão 0.3.7 (2025-12-31)</p>
+<h3 id="correcoes_5"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Ajuste _fetch_from_api para limpar db local caso necessário.</li>
+</ul>
+<p>Versão 0.3.6 (2025-12-31)</p>
+<h3 id="correcoes_6"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Inclua ajuste para caso corrompido db local ele faça a limpeza e nova chamada para api de parâmetros em _get_from_local_db.</li>
+</ul>
+<p>Versão 0.3.3 (2025-12-17)</p>
+<h3 id="correcoes_7"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Corrija utilização de parâmetro save_cache em _fetch_param_from_api.</li>
+</ul>
+<p>Versão 0.3.1 (2025-12-16)</p>
+<h3 id="correcoes_8"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Inclua parâmetro save_cache para definir se ira ou não salvar do .db local.</li>
+</ul>
+<p>Versão 0.3.0 (2025-12-12)</p>
+<h3 id="novas-funcionalidades_3"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Inclua métodos para criação/deleção e atualização de aplicações e parâmetros.</li>
+</ul>
+<h3 id="documentacao_2"><img alt="📂" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f4c2.svg" title=":open_file_folder:" /> DOCUMENTAÇÃO</h3>
+<ul>
+<li>Inclua informações sobre novos parâmetros de criação, atualização e remoção de aplicativos e parâmetros.</li>
+</ul>
+<h3 id="testes_1"><img alt="🧪" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f9ea.svg" title=":test_tube:" /> TESTES</h3>
+<ul>
+<li>Inclusa novos testes para novos métodos de criação, deleção e atualização de aplicações e parâmetros.</li>
+</ul>
+<p>Versão 0.2.6 (2025-12-01)</p>
+<h3 id="novas-funcionalidades_4"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Inclua descriptografia para type user e users.</li>
+</ul>
+<p>Versão 0.2.5 (2025-11-28)</p>
+<h3 id="novas-funcionalidades_5"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Inclua compatibilidade com atualização de API de parâmetros.</li>
+</ul>
+<h3 id="correcoes_9"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Corrija descriptografia para aceitar versão antiga e versão nova.</li>
+</ul>
+<p>Versão 0.2.2 (2025-07-10)</p>
+<h3 id="correcoes_10"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Corrigido local_path_db e .env para geração de executaveis com o pyinstaller.</li>
+</ul>
+<p>Versão 0.2.1 (2025-07-10)</p>
+<h3 id="correcoes_11"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Adicionado dependências no pyproject.toml.</li>
+</ul>
+<p>Versão 0.2.0 (2025-07-09)</p>
+<h3 id="novas-funcionalidades_6"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Adicionado tipo "secret" com descriptografia de dados salvos na API com base no arquivo de variaveis de ambiente ".env".</li>
+</ul>
+<p>Versão 0.1.7 (2025-07-03)</p>
+<h3 id="correcoes_12"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>adicionado suporte a multi-threads.</li>
+</ul>
+<p>Versão 0.1.6 (2025-06-19)</p>
+<h3 id="correcoes_13"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Correção de utilização de cache caso a API esteja fora do ar.</li>
+</ul>
+<p>Versão 0.1.5 (2025-06-05)</p>
+<h3 id="correcoes_14"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Corrigido leitura de parâmetros unitários ao realizar consulta pelo método get_param.</li>
+</ul>
+<p>Versão 0.1.4 (2025-06-01)</p>
+<h3 id="correcoes_15"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Correção de salvamento de arquivo db local com opção de passar o path.</li>
+</ul>
+<p>Versão 0.1.3 (2025-05-30)</p>
+<h3 id="correcoes_16"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Correção de url na requisição de todos os parametros e alteração de salvamento de db local para pasta da biblioteca.</li>
+</ul>
+<p>Versão 0.1.2 (2025-05-27)</p>
+<h3 id="correcoes_17"><img alt="🐛" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f41b.svg" title=":bug:" /> CORREÇÕES</h3>
+<ul>
+<li>Corrigido salvamente em DB local para chamada de parametro unitario.</li>
+</ul>
+<p>Versão 0.1.0 (2025-05-23)</p>
+<h3 id="novas-funcionalidades_7"><img alt="⚡" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/26a1.svg" title=":zap:" /> NOVAS FUNCIONALIDADES</h3>
+<ul>
+<li>Adicionado sistema de cache global para parâmetros de aplicações, reduzindo chamadas à API e melhorando performance.</li>
+<li>Adicionado sistema de fallback para TinyDB, permitindo acesso a parâmetros mesmo quando a API está indisponível.</li>
+<li>Adicionados métodos para limpeza de cache (global, por aplicação e por parâmetro específico), permitindo controle granular sobre dados em cache.</li>
+<li>Implementada integração com API de parâmetros, permitindo recuperação de dados de configuração de forma centralizada.</li>
+<li>Implementado cache específico por parâmetro individual, permitindo consultas mais eficientes para parâmetros frequentemente acessados.</li>
+<li>Implementado padrão Singleton para garantir uma única instância do gerenciador de parâmetros, evitando múltiplas conexões e caches redundantes.</li>
+</ul>
+<h3 id="otimizacoes_2"><img alt="🚀" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@16.0.1/assets/svg/1f680.svg" title=":rocket:" /> OTIMIZAÇÕES</h3>
+<ul>
+<li>Adicionado sistema de logging integrado para rastreamento de operações e diagnóstico de problemas.</li>
+<li>Implementada configuração flexível para URL da API, duração de cache e timeout, permitindo personalização conforme necessidades específicas.</li>
+<li>Implementado método get_cache_info() para inspeção do estado atual do cache, facilitando diagnóstico e depuração.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Rodapé" >
+        
+          
+          <a href="../contribuindo/" class="md-footer__link md-footer__link--prev" aria-label="Anterior: Contribuindo">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Anterior
+              </span>
+              <div class="md-ellipsis">
+                Contribuindo
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../estrutura/" class="md-footer__link md-footer__link--next" aria-label="Próximo: Estrutura">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Próximo
+              </span>
+              <div class="md-ellipsis">
+                Estrutura
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["content.code.annotate", "content.tabs.link", "content.code.copy", "navigation.footer"], "search": "../assets/javascripts/workers/search.f8cc74c7.min.js", "tags": null, "translations": {"clipboard.copied": "Copiado para \u00e1rea de transfer\u00eancia", "clipboard.copy": "Copiar para \u00e1rea de transfer\u00eancia", "search.result.more.one": "mais 1 nesta p\u00e1gina", "search.result.more.other": "# mais nesta p\u00e1gina", "search.result.none": "Nenhum documento encontrado", "search.result.one": "1 documento encontrado", "search.result.other": "# documentos encontrados", "search.result.placeholder": "Digite para iniciar a busca", "search.result.term.missing": "Ausente", "select.version": "Selecione a vers\u00e3o"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.c8b220af.min.js"></script>
+      
+        <script src="../assets/js/filetree.js"></script>
+      
+        <script src="../assets/js/termynal-init.js"></script>
+      
+        <script src="../assets/js/termynal.js"></script>
+      
+        <script src="../assets/js/LogoAnimation.js"></script>
+      
+    
+  </body>
+</html>
