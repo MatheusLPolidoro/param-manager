@@ -1,1 +1,0 @@
-Texto maior, linhas de tabela mais folgadas e contraste ampliado nos dois temas. O tema passa a ser trocado por um botão de ícone que percorre sistema, claro e escuro, e cada tipo de parâmetro ganhou um ícone próprio na listagem.

@@ -1,6 +1,6 @@
 [project]
 name = "param-manager"
-version = "0.5.0"
+version = "0.6.0"
 description = "Biblioteca para gerenciamento de parâmetros, com cache, armazenamento local em TinyDB e modo de desenvolvimento sem servidor."
 authors = [{name = "MatheusLPolidoro", email = "mattpolidoro4@gmail.com"}]
 readme = "README.md"

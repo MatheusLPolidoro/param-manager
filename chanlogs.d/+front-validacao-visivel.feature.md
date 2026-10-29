@@ -1,1 +1,0 @@
-Avisos do catálogo de tipos aparecem na tela ao salvar um parâmetro — limite de comprimento, faixa de valor, tipo desconhecido. Continuam sendo conselho e não impedem a gravação: quem valida de verdade é o servidor. Antes só existiam no log.

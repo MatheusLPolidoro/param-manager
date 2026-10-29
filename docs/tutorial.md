@@ -36,9 +36,17 @@ param_manager = ParamManager.get_instance(
     cache_duration=1800,
     timeout=10,
     username="admin",
-    password="SenhaSegura123"
+    password="SenhaSegura123",
+    api_error_cooldown=60,
+    verify_ssl=True,
 )
 ```
+
+`api_error_cooldown` é quanto tempo, em segundos, a biblioteca espera depois de
+uma falha da API antes de tentar de novo; sem ele, vale o próprio
+`cache_duration`. `verify_ssl` liga a verificação de certificado TLS nas
+leituras. Todas as opções, com as variáveis de ambiente correspondentes, estão
+em [Configuração](configuracao.md).
 
 ---
 
@@ -111,8 +119,21 @@ param_manager.delete_param("financeiro", "limite_diario")
 
 ## 🟧 Atualizar Apenas um Campo
 
-Use o próprio `upsert_params`: informe só o que muda, e os metadados já
-gravados são preservados.
+Use o próprio `upsert_params`: informe só o que muda. Os campos opcionais que
+você não passar (`description`, `user_editable`, limites, `referenced_params`)
+**não são enviados** ao servidor.
+
+O que acontece com eles depende de como o servidor está configurado:
+
+- Com `USER_EDITABLE_ENFORCEMENT=explicit`, os metadados já gravados são
+  **preservados**, e só muda o que foi enviado.
+- No modo padrão, `legacy`, o servidor preenche os campos ausentes com os
+  **valores padrão** — `user_editable` volta a `False`, por exemplo.
+
+Se o valor de um metadado importa, passe-o explicitamente. A configuração do
+servidor está descrita em
+[`USER_EDITABLE_ENFORCEMENT`](https://matheuslpolidoro.github.io/docs-param-manager/latest/api/autenticacao/#user_editable_enforcement),
+no site do produto.
 
 ```python
 param_manager.upsert_params(

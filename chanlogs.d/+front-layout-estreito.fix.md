@@ -1,1 +1,0 @@
-A janela deixa de quebrar ao ser reduzida: a lista de aplicações vira uma gaveta, o cabeçalho reorganiza os controles e a tabela rola dentro da própria área. Os diálogos ganharam tamanho confortável e transição de entrada.

@@ -1,1 +1,0 @@
-O editor de `json` e `pattern` perdeu o contorno duro que aparecia no tema escuro. O formulário de usuário ficou contido e centrado, com o identificador como etiqueta em vez de campo. Listas, dicionários e segredos ganharam moldura própria, e os campos numéricos perderam as setas de incremento.

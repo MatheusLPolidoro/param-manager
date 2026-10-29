@@ -101,5 +101,5 @@ force na hora de instalar:
 ```powershell
 Remove-Item -Recurse -Force build, dist, param_manager.egg-info -ErrorAction SilentlyContinue
 python -m build --wheel
-pip install --force-reinstall --no-deps dist\param_manager-0.5.0-py3-none-any.whl
+pip install --force-reinstall --no-deps dist\param_manager-0.6.0-py3-none-any.whl
 ```

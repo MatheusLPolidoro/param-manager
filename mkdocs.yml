@@ -6,7 +6,9 @@ nav:
       - Introdução: primeiros_passos.md
       - Instalação: instalacao.md
       - Tutorial: tutorial.md
+  - Configuração: configuracao.md
   - Modo local: modo_local.md
+  - Front desktop: front.md
   - Contribuindo: contribuindo.md
   - Alterações: changelog.md
   - Estrutura: estrutura.md

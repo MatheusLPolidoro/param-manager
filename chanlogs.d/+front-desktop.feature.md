@@ -1,1 +1,0 @@
-Gerencie parâmetros por um aplicativo de desktop, instalado com `pip install "param-manager[front]"` e aberto pelo comando `param-manager-front`. Ele cobre aplicações e parâmetros, o plano de sincronização e o catálogo de tipos, em português e inglês, com tema claro e escuro. Disponível do Python 3.11 ao 3.13.

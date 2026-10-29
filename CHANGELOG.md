@@ -1,3 +1,60 @@
+Versão 0.6.0 (2026-10-29)
+
+### :zap: NOVAS FUNCIONALIDADES
+
+- A lista de aplicações pode ser recolhida e redimensionada, e a largura escolhida é lembrada. O painel de parâmetro fecha ao clicar no vazio da área de conteúdo ou com Esc.
+- Aplicações e parâmetros ganharam filtro: digite para buscar por nome, descrição ou tipo, e tecle Enter para fixar o termo como etiqueta — vários termos se acumulam. Parâmetros também filtram por tipo, e o contador mostra quantos de quantos estão à vista.
+- Avisos do catálogo de tipos aparecem na tela ao salvar um parâmetro — limite de comprimento, faixa de valor, tipo desconhecido. Continuam sendo conselho e não impedem a gravação: quem valida de verdade é o servidor. Antes só existiam no log.
+- Cada tipo de parâmetro ganhou o editor que lhe cabe: listas e dicionários com linhas que se adicionam e removem, booleano como par de botões, data e hora com o seletor do sistema, referência escolhendo entre os parâmetros que existem no aplicativo, e usuários numa tabela. Digitar JSON à mão deixou de ser necessário fora do tipo `json`.
+- Gerencie parâmetros por um aplicativo de desktop, instalado com `pip install "param-manager[front]"` e aberto pelo comando `param-manager-front`. Ele cobre aplicações e parâmetros, o plano de sincronização e o catálogo de tipos, em português e inglês, com tema claro e escuro. Disponível do Python 3.11 ao 3.13.
+- Liste os parâmetros de uma aplicação com tipo, descrição e estado de sincronização, sem trazer os valores, por `api.list_params`.
+- O painel de detalhe mostra os limites, o estado de sincronização, a data da última alteração e a recusa que o servidor tenha registrado. Aplicações e parâmetros ganharam navegação por páginas.
+- Os tipos `json` e `pattern` passam a ser editados num campo com numeração de linha e realce de sintaxe, com o mesmo tratamento para os dois.
+- Valores que não cabem no painel lateral — `json`, `pattern`, `user` e `users` — ganharam um botão que abre o editor em tela larga.
+
+### :rocket: OTIMIZAÇÕES
+
+- A biblioteca passa a instalar em qualquer Python a partir do 3.10, sem limite superior. Antes, o limite declarado recusava até as correções do 3.14, como o 3.14.1. O extra `front` continua indisponível a partir do 3.14, porque o componente nativo de que ele depende ainda não publica pacote para essas versões.
+- A descrição da aplicação aparece acima da tabela, e o painel de detalhe passa a mostrar aplicação e tipo junto aos demais metadados. As datas são exibidas em linguagem corrente — "há 2 horas" —, com a data exata ao repousar o ponteiro. Criar uma aplicação leva direto para a aba de parâmetros.
+- A edição de usuários virou uma tabela com cabeçalho e um interruptor de status que mostra por escrito se está ativo ou inativo. O editor expandido ficou maior e com tratamento de editor de código para `json` e `pattern`.
+- A marca ficou alinhada ao título na barra superior, as tabelas ganharam linhas em zebra no roxo do produto, e a descrição virou um campo de várias linhas onde ela costuma precisar.
+- A paginação passou a numerar as páginas e a permitir escolher quantas linhas exibir. Listas, dicionários e usuários dentro de um parâmetro também paginam, em vez de crescer até empurrar os botões para fora da tela.
+- A tela de sessão esconde URL, usuário e senha quando o modo escolhido é o local, onde não há rede, e explica onde os parâmetros serão gravados.
+- Ações e listas ganharam ícones, que acompanham o rótulo e seguem a cor do tema em uso.
+- Excluir uma aplicação ou um parâmetro passa a exigir que o nome seja digitado. O aviso também diz quantos parâmetros vão junto ao excluir uma aplicação.
+- Nome de aplicação e chave de parâmetro passam a trocar espaços por hífen enquanto se digita, já que viram parte do endereço no servidor.
+- O aplicativo passa a usar a marca e o roxo do Param Manager, os mesmos do site de documentação.
+- O editor de `json` e `pattern` abre um pouco mais alto e levemente mais estreito que os demais campos.
+- O editor de `json` e `pattern` perdeu o contorno duro que aparecia no tema escuro. O formulário de usuário ficou contido e centrado, com o identificador como etiqueta em vez de campo. Listas, dicionários e segredos ganharam moldura própria, e os campos numéricos perderam as setas de incremento.
+- Texto maior, linhas de tabela mais folgadas e contraste ampliado nos dois temas. O tema passa a ser trocado por um botão de ícone que percorre sistema, claro e escuro, e cada tipo de parâmetro ganhou um ícone próprio na listagem.
+- Usuários ganharam identificador gerado automaticamente, garantidamente sem repetição, exibido na tabela e no formulário. O formulário de usuário passou a seguir o mesmo desenho do painel administrativo web.
+
+### :bug: CORREÇÕES
+
+- A coluna "atualizado" volta a mostrar a data em modo remoto, e no fuso certo. Ela aparecia como travessão, e antes disso como uma hora no futuro, porque o carimbo do servidor é UTC e vinha sem essa marcação.
+- A janela deixa de quebrar ao ser reduzida: a lista de aplicações vira uma gaveta, o cabeçalho reorganiza os controles e a tabela rola dentro da própria área. Os diálogos ganharam tamanho confortável e transição de entrada.
+- A tela deixa de ficar em branco quando a janela é reduzida ao limite com a lista de aplicações recolhida.
+- As barras de rolagem deixam de ficar claras no tema escuro.
+- Campos de número inteiro deixam de aceitar `e`, letras e sinais fora de lugar. Antes um valor como `12e5` era gravado como `12`, silenciosamente.
+- Conectar uma sessão que já existe, escolhendo outro modo, deixa de anunciar sucesso. O front agora explica que a instância continua no modo anterior e oferece um nome novo para abrir a sessão no modo pedido.
+- Corrija o front desktop instalado a partir do wheel, que abria sem ícones, sem
+  rótulos e sem opções nos seletores: um comentário do código carregava por
+  coincidência a assinatura de arquivo `tar` num byte que o protocolo interno
+  do aplicativo usa para adivinhar o tipo de conteúdo, fazendo o navegador
+  recusar aquele módulo e, em cascata, quase toda a tela.
+- Editar um parâmetro pelo front deixa de apagar os campos que o formulário não mostra. `user_editable`, os limites e os parâmetros referenciados eram perdidos ao salvar, sem nenhum aviso.
+- Excluir uma aplicação deixa de manter aberto o painel de um parâmetro que já não existe. Trocar de aplicação também descarta a edição em andamento, que antes seguia oferecendo salvar num parâmetro de outro lugar.
+- Trocar o tema ou a página deixa de reconstruir a tela inteira: o que estava sendo editado no painel de parâmetro é preservado, sem o piscar do redesenho.
+
+### :open_file_folder: DOCUMENTAÇÃO
+
+- A documentação ganhou as páginas de Configuração, com todas as variáveis de ambiente e a ordem de precedência, e do Front desktop. O README, que é também a página do pacote no PyPI, deixou de descrever a biblioteca como singleton e de prometer cache de uma hora, e passou a exibir o fluxograma do cliente também no PyPI. O tutorial corrige uma promessa: metadados omitidos em `upsert_params` só são preservados quando o servidor roda com `USER_EDITABLE_ENFORCEMENT=explicit`.
+
+### :classical_building: INFRAESTRUTURA
+
+- A auditoria de vulnerabilidades passa a separar a ferramenta do pacote auditado e a rodar em dois pisos: o da biblioteca (3.10) e o do extra `front` (3.11). Antes, falhas nas dependências da própria ferramenta reprovavam a auditoria sem nunca chegar a quem instala a biblioteca, e o extra era auditado num Python em que ele já não pode ser instalado.
+
+
 Versão 0.5.0 (2026-08-10)
 
 ### :warning: MUDANÇAS QUEBRADAS

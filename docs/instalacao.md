@@ -16,3 +16,11 @@ Crie e ative um ambiente virtual, e então instale o ParamManager:
     <span data-ty="progress"></span>
   </div>
 </div>
+
+Para o aplicativo de desktop, instale com o extra `front` (Python 3.11 a 3.13):
+
+```bash
+pip install "param-manager[front]"
+```
+
+Requisitos e uso em [Front desktop](front.md).
